@@ -61,6 +61,8 @@ class VxTarget(object):
 
     def prepare(self):
         self.find_symbol_table()
+        if self._has_symbol is False:
+            return None
         self.get_symbol_table()
 
     def _check_vxworks_endian(self):
@@ -447,7 +449,7 @@ Please choose VxWorks main version
 # Plugin
 # --------------------------------------------------------------------------
 class VxHunter_Plugin_t(idaapi.plugin_t):
-    comment = "VxHunter plugin for IDA Pro (using Keystone framework)"
+    comment = "VxHunter plugin for IDA Pro"
     help = ""
     wanted_name = "VxHunter"
     wanted_hotkey = ""
@@ -498,6 +500,7 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             firmware = open(firmware_path).read()
             target = VxTarget(firmware=firmware, vx_version=vx_version)
             target.quick_test()
+
             if target.load_address:
                 print("Load Address is:%s" % target.load_address)
             else:
