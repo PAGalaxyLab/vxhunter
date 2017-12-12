@@ -3,7 +3,6 @@ import logging
 import os
 import time
 import struct
-import curses.ascii
 import idc
 import idaapi
 from idc import GetOpType, GetOpnd, ItemEnd
@@ -13,17 +12,17 @@ default_check_count = 100
 known_address = [0x80002000, 0x10000, 0x1000, 0xf2003fe4, 0x100000, 0x107fe0]
 
 symbol_format_sign_5 = [
-    '\x00\x00\x05\x00',
-    '\x00\x00\x07\x00',
-    '\x00\x00\x09\x00',
-    '\x00\x00\x11\x00'
+    '\x00\x00\x05\x00',  # Function
+    '\x00\x00\x07\x00',  # Variable
+    '\x00\x00\x09\x00',  # Variable
+    '\x00\x00\x11\x00'   #
 ]
 
 symbol_format_sign_6 = [
     '\x00\x00\x00\x00\x00\x00\x03\x00',  # Unknown Type (Might not function name)
-    '\x00\x00\x00\x00\x00\x00\x05\x00',
-    '\x00\x00\x00\x00\x00\x00\x07\x00',
-    '\x00\x00\x00\x00\x00\x00\x09\x00',
+    '\x00\x00\x00\x00\x00\x00\x05\x00',  # Function
+    '\x00\x00\x00\x00\x00\x00\x07\x00',  # Variable
+    '\x00\x00\x00\x00\x00\x00\x09\x00',  # Variable
     '\x00\x00\x00\x00\x00\x00\x11\x00'
 ]
 
@@ -221,6 +220,10 @@ class VxTarget(object):
                                                       i + 1]['string_addr'], 16) - int(
                 self._symbol_table[i]['string_addr'], 16)
 
+    @staticmethod
+    def _isprint(c):
+        return 32 <= ord(c) <= 126
+
     def _check_func_name(self, string):
         bad_str = ['\\', '%', '+', ',', '&', '/']
         # function name length should less than 255 byte
@@ -230,7 +233,7 @@ class VxTarget(object):
             if data in string:
                 return False
         for c in string:
-            if curses.ascii.isprint(c) is False:
+            if self._isprint(c) is False:
                 return False
         return True
 
@@ -260,7 +263,7 @@ class VxTarget(object):
 
         while offset < len(self._firmware):
             # find first printable char
-            if curses.ascii.isprint(self._firmware[offset]) is True:
+            if self._isprint(self._firmware[offset]) is True:
                 # get string from offset
                 string, start_address, end_address = self._get_string_data(offset)
                 # check string is function name
@@ -543,10 +546,12 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             sName = idc.GetString(idc.Dword(ea + offset), -1, idc.ASCSTR_C)
             print(sName)
             if sName:
-                eaFunc = idc.Dword(ea + offset + 4)
-                idc.MakeName(eaFunc, sName)
-                idc.MakeCode(eaFunc)
-                idc.MakeFunction(eaFunc, idc.BADADDR)
+                sName_dst = idc.Dword(ea + offset + 4)
+                sName_type = idc.Dword(ea + offset + 8)
+                idc.MakeName(sName_dst, sName)
+                if sName_type == 0x0500:
+                    idc.MakeCode(sName_dst)
+                    idc.MakeFunction(sName_dst, idc.BADADDR)
             ea += symbol_interval
         idaapi.autoWait()
 
