@@ -617,6 +617,8 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
                     idc.MakeCode(sName_dst)
                     idc.MakeFunction(sName_dst, idc.BADADDR)
             ea += symbol_interval
+        print("Fix function by symbol table finish.")
+        print("Start IDA auto analysis, depending on the size of the firmware this might take a few minutes.")
         idaapi.autoWait()
 
     def run(self, arg):
