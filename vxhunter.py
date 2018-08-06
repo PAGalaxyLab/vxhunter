@@ -11,6 +11,8 @@ default_check_count = 100
 
 known_address = [0x80002000, 0x10000, 0x1000, 0xf2003fe4, 0x100000, 0x107fe0]
 
+function_name_key_words = ['bzero', 'usrInit', 'bfill']
+
 symbol_format_sign_5 = [
     '\x00\x00\x05\x00',  # Function
     '\x00\x00\x07\x00',  # Variable
@@ -24,6 +26,11 @@ symbol_format_sign_6 = [
     '\x00\x00\x00\x00\x00\x00\x07\x00',  # Variable
     '\x00\x00\x00\x00\x00\x00\x09\x00',  # Variable
     '\x00\x00\x00\x00\x00\x00\x11\x00'
+]
+
+need_create_function = [
+    0x0500,
+    0x050000
 ]
 
 
@@ -237,7 +244,23 @@ class VxTarget(object):
                 return False
         return True
 
-    def _get_string_data(self, offset):
+    def _get_prev_string_data(self, offset):
+        while offset > 0:
+            if self._firmware[offset].encode('hex') != '00':
+                start_address = offset
+                end_address = offset + 1
+                while offset > 0:
+                    if self._firmware[offset - 1].encode('hex') == '00':
+                        start_address = offset
+                        break
+                    offset -= 1
+                data = self._firmware[start_address:end_address]
+                return data, start_address, end_address
+            else:
+                offset -= 1
+        return None, None, None
+
+    def _get_next_string_data(self, offset):
         while offset < len(self._firmware):
             if self._firmware[offset].encode('hex') != '00':
                 start_address = offset
@@ -253,54 +276,93 @@ class VxTarget(object):
                 offset += 1
         return None, None, None
 
-    def find_string_table(self, offset):
+    def find_string_table_by_key_function_index(self, key_offset):
         # TODO: 需要在符号表中String可能不连续的问题
         temp_str_tab_data = []
         if len(self._symbol_table) > default_check_count:
             count = default_check_count
         else:
             count = len(self._symbol_table)
+        start_offset = key_offset
+        end_offset = key_offset
 
-        while offset < len(self._firmware):
-            # find first printable char
-            if self._isprint(self._firmware[offset]) is True:
+        while start_offset > 0:
+            if self._isprint(self._firmware[start_offset]) is True:
                 # get string from offset
-                string, start_address, end_address = self._get_string_data(offset)
+                string, start_address, end_address = self._get_prev_string_data(start_offset)
+                self.logger.debug("string:%s, start_address:%s, end_address:%s" % (string, hex(start_address), hex(end_address)))
+                # check string is function name
+                if self._check_func_name(string) is False:
+                    if len(temp_str_tab_data) < count:
+                        self.logger.error("Can't find any string table with key index.")
+                        return None, None
+                    else:
+                        self.logger.info("found string table start address at %s" % hex(start_address))
+                        break
+                else:
+                    temp_str_tab_data.append((string, start_address, end_address))
+
+                # get previous string from offset
+                prev_string, prev_start_address, prev_end_address = self._get_prev_string_data(start_address - 1)
+                self.logger.debug(
+                    "prev_string:%s, prev_start_address:%s, prev_end_address:%s" % (prev_string, hex(prev_start_address), hex(prev_end_address)))
+                if prev_start_address:
+                    # strings interval should less than 4
+                    if 4 < (start_address - prev_end_address):
+                        if len(temp_str_tab_data) < count:
+                            self.logger.error("Can't find any string table with key index.")
+                            return None, None
+                        else:
+                            self.logger.info("found string table start address at %s" % hex(start_address))
+                            break
+                    else:
+                        start_offset = start_address - 1
+                        self.logger.info("start_offset: %s" % start_offset)
+                else:
+                    break
+            else:
+                start_offset -= 1
+
+        while end_offset < len(self._firmware):
+            # find first printable char
+            if self._isprint(self._firmware[end_offset]) is True:
+                # get string from offset
+                string, start_address, end_address = self._get_next_string_data(end_offset)
                 # check string is function name
                 if self._check_func_name(string) is False:
                     if len(temp_str_tab_data) < count:
                         temp_str_tab_data = []
-                        offset = end_address
+                        end_offset = end_address
                         continue
                     else:
-                        start_offset = temp_str_tab_data[0][1]
-                        end_offset = temp_str_tab_data[-1][2]
-                        self.logger.info("found a string tab at: %s to %s" % (hex(start_offset), hex(end_offset)))
-                        return start_offset, end_offset
+                        self.logger.info("found string table end at %s" % hex(end_address))
+                        break
+                        # start_offset = temp_str_tab_data[0][1]
+                        # end_offset = temp_str_tab_data[-1][2]
                 else:
                     temp_str_tab_data.append((string, start_address, end_address))
 
                 # get next string from offset
-                next_string, next_start_address, next_end_address = self._get_string_data(end_address)
+                next_string, next_start_address, next_end_address = self._get_next_string_data(end_address)
                 if next_start_address:
-                    # strings interval should between 4
+                    # strings interval should less than 4
                     if 4 < (next_start_address - end_address):
-                        offset = next_end_address
                         if len(temp_str_tab_data) < count:
-                            temp_str_tab_data = []
-                            continue
+                            self.logger.error("Can't find any string table with key index.")
+                            return None, None
                         else:
-                            start_offset = temp_str_tab_data[0][1]
-                            end_offset = temp_str_tab_data[-1][2]
-                            self.logger.info("found end %s to %s" % (hex(start_address), hex(end_address)))
-                            self.logger.info("found a string tab at: %s to %s" % (hex(start_offset), hex(end_offset)))
-                            return start_offset, end_offset
+                            self.logger.info("found string table end at %s" % hex(end_address))
+                            break
                     else:
-                        offset = end_address
+                        end_offset = end_address
             else:
-                offset += 1
-        self.logger.error("can't find any string table this time")
-        return None, None
+                end_offset += 1
+
+        temp_str_tab_data = sorted(temp_str_tab_data, key=lambda x: (x[1]))
+        table_start_offset = temp_str_tab_data[0][1]
+        table_end_offset = temp_str_tab_data[-1][2]
+        self.logger.info("found a string tab at: %s to %s" % (hex(table_start_offset), hex(table_end_offset)))
+        return table_start_offset, table_end_offset
 
     def get_string_table(self, str_start_address, str_end_address):
         self._string_table = []
@@ -348,34 +410,32 @@ class VxTarget(object):
         self.prepare()
         if self._has_symbol is False:
             return None
-        offset = 0
-        while offset < len(self._firmware):
-            self.logger.info('offset is : %s' % offset)
-            str_start_address, str_end_address = self.find_string_table(offset)
-            if str_start_address is None:
-                break
-            self.logger.info("Start get all strings from %s to %s" % (hex(str_start_address), hex(str_end_address)))
-            self.get_string_table(str_start_address, str_end_address)
-            # TODO: 需要性能优化
-            self.logger.info("Start analyse")
-            for func_index in range(len(self._symbol_table)):
-                for str_index in range(len(self._string_table)):
-                    if self._string_table[str_index]['length'] == self._symbol_table[func_index]['length']:
-                        if self._check_fix(func_index, str_index) is True:
-                            self.logger.info(self._symbol_table[func_index]['string_addr'])
-                            self.logger.info(self._string_table[str_index]['address'])
-                            self.load_address = int(self._symbol_table[func_index][
-                                                         'string_addr'], 16) - int(
-                                self._string_table[str_index]['address'], 16)
-                            self.logger.info('load address is :%s' % hex(self.load_address))
-                            return self.load_address
-                    else:
-                        continue
-            self.logger.info('did not found loading address this time')
-            self.logger.info('start search next string table!')
-            offset = str_end_address
-            self.logger.info('offset is %s' % hex(offset))
-        self.logger.error("we can't find load address in this firmware, sorry!")
+
+        for key_word in function_name_key_words:
+            key_word = '\x00' + key_word + '\x00'
+            if key_word in self._firmware is False:
+                self.logger.info("This firmware didn't contain function name")
+                return None
+
+        key_function_index = self._firmware.index('\x00' + function_name_key_words[0] + '\x00')
+        str_start_address, str_end_address = self.find_string_table_by_key_function_index(key_function_index)
+        self.get_string_table(str_start_address, str_end_address)
+        # TODO: 需要性能优化
+        self.logger.info("Start analyse")
+        for func_index in range(len(self._symbol_table)):
+            for str_index in range(len(self._string_table)):
+                if self._string_table[str_index]['length'] == self._symbol_table[func_index]['length']:
+                    if self._check_fix(func_index, str_index) is True:
+                        self.logger.info(self._symbol_table[func_index]['string_addr'])
+                        self.logger.info(self._string_table[str_index]['address'])
+                        self.load_address = int(self._symbol_table[func_index][
+                                                     'string_addr'], 16) - int(
+                            self._string_table[str_index]['address'], 16)
+                        self.logger.info('load address is :%s' % hex(self.load_address))
+                        return self.load_address
+                else:
+                    continue
+        self.logger.error("we didn't find load address in this firmware, sorry!")
 
     def _check_load_address(self, address):
         if not self._has_symbol:
@@ -389,7 +449,7 @@ class VxTarget(object):
             if offset <= 0:
                 return False
             # TODO: 方法需要完善，目前只是判断符号表中string指针是否为字符来判断并不可靠。
-            string, str_start_address, str_end_address = self._get_string_data(offset)
+            string, str_start_address, str_end_address = self._get_next_string_data(offset)
             if str_start_address != offset:
                 self.logger.info("strings at offset didn't match symbol table")
                 return False
@@ -502,6 +562,7 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             firmware_path = idaapi.get_input_file_path()
             firmware = open(firmware_path).read()
             target = VxTarget(firmware=firmware, vx_version=vx_version)
+            # target.logger.setLevel(logging.DEBUG)
             target.quick_test()
 
             if target.load_address:
@@ -532,7 +593,6 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             idaapi.rebase_program(0x70000000, 0x0008)
             shift_address -= 0x70000000
         idaapi.rebase_program(shift_address, 0x0008)
-        # idaapi.autoWait()
         while ea < symbol_table_end:
             # for VxWorks 6 unknown symbol format
             if idc.Byte(ea + symbol_table_end - 2) == 3:
@@ -544,12 +604,16 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             else:
                 idc.MakeStr(idc.Dword(ea + offset), idc.BADADDR)
             sName = idc.GetString(idc.Dword(ea + offset), -1, idc.ASCSTR_C)
-            print(sName)
+            print("Found %s in symbol table" % sName)
             if sName:
                 sName_dst = idc.Dword(ea + offset + 4)
-                sName_type = idc.Dword(ea + offset + 8)
+                if vx_version == 6:
+                    sName_type = idc.Dword(ea + offset + 12)
+                else:
+                    sName_type = idc.Dword(ea + offset + 8)
                 idc.MakeName(sName_dst, sName)
-                if sName_type == 0x0500:
+                if sName_type in need_create_function:
+                    print("Start fix Function %s at %s" % (sName, hex(sName_dst)))
                     idc.MakeCode(sName_dst)
                     idc.MakeFunction(sName_dst, idc.BADADDR)
             ea += symbol_interval
