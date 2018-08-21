@@ -66,12 +66,20 @@ class VxTarget(object):
             self.logger = logger
 
     def prepare(self):
+        """ Trying to find symbol from image.
+
+        :return: True if found symbol, False otherwise.
+        """
         self.find_symbol_table()
         if self._has_symbol is False:
             return None
         self.get_symbol_table()
 
     def _check_vxworks_endian(self):
+        """ Get image endian from image file.
+
+        :return:
+        """
         data1 = self._firmware[self.symbol_table_start + 4:self.symbol_table_start + 4 + self._symbol_interval]
         data2 = self._firmware[self.symbol_table_start + 4 + self._symbol_interval:self.symbol_table_start +
                                                                                    4 + self._symbol_interval * 2]
@@ -83,104 +91,82 @@ class VxTarget(object):
             self._endian = 2
 
     def _check_symbol_format(self, offset):
-        data = self._firmware[offset:offset + self._symbol_interval * 10]
+        """ Check offset is symbol table.
+
+        :param offset: offset from image.
+        :return: True if offset is symbol table, False otherwise.
+        """
+        check_data = self._firmware[offset:offset + self._symbol_interval * 10]
         is_big_edian = True
         is_little_edian = True
+        # check symbol data match sign
+        for i in range(10):
+            check_data_1 = check_data[i * self._symbol_interval:(i + 1) * self._symbol_interval]
+            if self._check_symbol_format_simple(check_data_1) is False:
+                return False
+
         if self._vx_version == 5:
             self.logger.debug("Check VxWorks 5 symbol format")
-            for i in range(10):
-                data1 = data[i * self._symbol_interval:(i + 1) * self._symbol_interval]
-                sign_match = False
-                # format simple check
-                if data1[:4] != '\x00\x00\x00\x00':
-                    return False
-                if data1[4:8] == '\x00\x00\x00\x00':
-                    return False
-                if data1[8:12] == '\x00\x00\x00\x00':
-                    return False
-                # check sign
-                for sign in symbol_format_sign_5:
-                    if data1[-4:] == sign:
-                        sign_match = True
-                        break
-                if sign_match is False:
-                    self.logger.debug("Didn't match any sign")
-                    return False
-
             # check is big endian
             for i in range(9):
-                data1 = data[4 + i * self._symbol_interval:6 + i * self._symbol_interval]
-                data2 = data[4 + (i + 1) * self._symbol_interval:6 + (i + 1) * self._symbol_interval]
-                if data1 != data2:
+                check_data_1 = check_data[4 + i * self._symbol_interval:6 + i * self._symbol_interval]
+                data2 = check_data[4 + (i + 1) * self._symbol_interval:6 + (i + 1) * self._symbol_interval]
+                if check_data_1 != data2:
                     self.logger.debug("is not big endian")
                     is_big_edian = False
                     break
 
             # check is little endian
             for i in range(9):
-                data1 = data[6 + i * self._symbol_interval:8 + i * self._symbol_interval]
-                data2 = data[6 + (i + 1) * self._symbol_interval:8 + (i + 1) * self._symbol_interval]
-                if data1 != data2:
+                check_data_1 = check_data[6 + i * self._symbol_interval:8 + i * self._symbol_interval]
+                data2 = check_data[6 + (i + 1) * self._symbol_interval:8 + (i + 1) * self._symbol_interval]
+                if check_data_1 != data2:
                     self.logger.debug("is not little endian")
                     is_little_edian = False
                     break
 
             return is_big_edian ^ is_little_edian
 
-        elif self._vx_version == 6:
-            self.logger.debug("Check VxWorks 6 symbol format")
-            # TODO: Need fix VxWorks version 6.x
-            for i in range(10):
-                # format simple check
-                data1 = data[i * self._symbol_interval:(i + 1) * self._symbol_interval]
-                if data1[:4] != '\x00\x00\x00\x00':
-                    return False
-                if data1[4:8] == '\x00\x00\x00\x00':
-                    return False
-                if data1[8:12] == '\x00\x00\x00\x00':
-                    return False
-                # TODO: Need handle this problem
-                # if symbol_format sign is '\x00\x00\x00\x00\x00\x00\x03\x00' sometime data1[8:12] will be '\x00\x00\x00\x00'
-                # if data1[8:12] == '\x00\x00\x00\x00':
-                #     return False
+        return True
 
-                # check sign
-                # print(data1[-8:])
-                if data1[-8:] not in symbol_format_sign_6:
-                    return False
-            return True
+    def _check_symbol_format_simple(self, data):
+        """ Check single symbol format is correct.
 
-    def _check_symbol_format_simple(self, offset):
+        :param data: single symbol data.
+        :return: True if data is symbol, False otherwise.
+        """
         if self._vx_version == 5:
-            data1 = self._firmware[offset:offset + self._symbol_interval]
-            if data1[:4] != '\x00\x00\x00\x00':
+            if data[:4] != '\x00\x00\x00\x00':
                 return False
-            if data1[4:8] == '\x00\x00\x00\x00':
+            if data[4:8] == '\x00\x00\x00\x00':
                 return False
-            if data1[8:12] == '\x00\x00\x00\x00':
+            if data[8:12] == '\x00\x00\x00\x00':
                 return False
             for sign in symbol_format_sign_5:
-                if data1[-4:] == sign:
+                if data[-4:] == sign:
                     return True
             return False
+
         elif self._vx_version == 6:
-            data1 = self._firmware[offset:offset + self._symbol_interval]
-            if data1[:4] != '\x00\x00\x00\x00':
+            if data[:4] != '\x00\x00\x00\x00':
                 return False
-            if data1[4:8] == '\x00\x00\x00\x00':
+            if data[4:8] == '\x00\x00\x00\x00':
                 return False
             # TODO: Need handle this problem
-            # if symbol_format sign is '\x00\x00\x00\x00\x00\x00\x03\x00' sometime data1[8:12] will be '\x00\x00\x00\x00'
-            # if data1[8:12] == '\x00\x00\x00\x00':
+            # sometime data[8:12] will be '\x00\x00\x00\x00'
+            # if data[8:12] == '\x00\x00\x00\x00':
             #     return False
-            if data1[-8:] in symbol_format_sign_6:
+            if data[-8:] in symbol_format_sign_6:
                 return True
             return False
 
+        return False
+
     def find_symbol_table(self):
-        '''
+        """ Find symbol table from image.
+
         :return:
-        '''
+        """
         for offset in range(len(self._firmware)):
             if self.symbol_table_start is None:
                 if self._check_symbol_format(offset):
@@ -193,7 +179,8 @@ class VxTarget(object):
 
         if self.symbol_table_start:
             for i in range(self.symbol_table_start, len(self._firmware), self._symbol_interval):
-                if self._check_symbol_format_simple(i):
+                check_data = self._firmware[i:i + self._symbol_interval]
+                if self._check_symbol_format_simple(check_data):
                     self.symbol_table_end = i + self._symbol_interval
                 else:
                     self.logger.info("symbol table end offset: %s" % hex(self.symbol_table_end))
@@ -203,48 +190,73 @@ class VxTarget(object):
             self._has_symbol = False
 
     def get_symbol_table(self):
+        """ get symbol table data.
+
+        :return: True if get symbol table data successful, False otherwise.
+        """
         if self.symbol_table_start and self.symbol_table_end:
             self._check_vxworks_endian()
 
+        else:
+            return False
+
         for i in range(self.symbol_table_start, self.symbol_table_end, self._symbol_interval):
-            str_addr = self._firmware[i + 4:i + 8]
-            func_addr = self._firmware[i + 8:i + 12]
+            func_name_addr = self._firmware[i + 4:i + 8]
+            func_code_addr = self._firmware[i + 8:i + 12]
             if self._endian == 1:
                 unpack_format = '>I'
             elif self._endian == 2:
                 unpack_format = 'I'
-            string_addr = struct.unpack(unpack_format, str_addr)[0]
-            function_addr = struct.unpack(unpack_format, func_addr)[0]
+            func_name_addr = struct.unpack(unpack_format, func_name_addr)[0]
+            func_code_addr = struct.unpack(unpack_format, func_code_addr)[0]
             self._symbol_table.append({
-                'string_addr': str(hex(string_addr)),
-                'length': None,
-                'function_addr': str(hex(function_addr)),
+                'func_name_addr': str(hex(func_name_addr)),
+                'func_name_length': None,
+                'func_code_addr': str(hex(func_code_addr)),
                 'offset': str(hex(i))
             })
-        self._symbol_table = sorted(self._symbol_table, key=lambda x: x['string_addr'])
+        self._symbol_table = sorted(self._symbol_table, key=lambda x: x['func_name_addr'])
         for i in range(len(self._symbol_table) - 1):
-            self._symbol_table[i]['length'] = int(self._symbol_table[
-                                                      i + 1]['string_addr'], 16) - int(
-                self._symbol_table[i]['string_addr'], 16)
+            self._symbol_table[i]['func_name_length'] = int(self._symbol_table[
+                                                      i + 1]['func_name_addr'], 16) - int(
+                self._symbol_table[i]['func_name_addr'], 16)
+        return True
 
     @staticmethod
-    def _isprint(c):
+    def _is_printable(c):
+        """ Check Char is printable.
+
+        :param c: char to check.
+        :return: True if char is printable, False otherwise.
+        """
         return 32 <= ord(c) <= 126
 
-    def _check_func_name(self, string):
+    def _check_is_func_name(self, string):
+        """ Check target string is match function name format.
+
+        :param string: string to check.
+        :return: True if string is match function name format, False otherwise.
+        """
         bad_str = ['\\', '%', '+', ',', '&', '/']
         # function name length should less than 255 byte
         if len(string) > 255:
             return False
+
         for data in bad_str:
             if data in string:
                 return False
+
         for c in string:
-            if self._isprint(c) is False:
+            if self._is_printable(c) is False:
                 return False
         return True
 
     def _get_prev_string_data(self, offset):
+        """ Get previous string from giving offset.
+
+        :param offset: offset of image.
+        :return: string data, string start offset, string end offset.
+        """
         while offset > 0:
             if self._firmware[offset].encode('hex') != '00':
                 start_address = offset
@@ -261,6 +273,11 @@ class VxTarget(object):
         return None, None, None
 
     def _get_next_string_data(self, offset):
+        """ Get next string from giving offset.
+
+        :param offset: offset of image.
+        :return: string data, string start offset, string end offset.
+        """
         while offset < len(self._firmware):
             if self._firmware[offset].encode('hex') != '00':
                 start_address = offset
@@ -277,7 +294,12 @@ class VxTarget(object):
         return None, None, None
 
     def find_string_table_by_key_function_index(self, key_offset):
-        # TODO: 需要在符号表中String可能不连续的问题
+        """ Find string table by VxWorks key function name offset in VxWorks image.
+
+        :param key_offset: key function name offset in VxWorks image.
+        :return:
+        """
+        # TODO: 需要解决在符号表中String可能不连续的问题
         temp_str_tab_data = []
         if len(self._symbol_table) > default_check_count:
             count = default_check_count
@@ -287,12 +309,12 @@ class VxTarget(object):
         end_offset = key_offset
 
         while start_offset > 0:
-            if self._isprint(self._firmware[start_offset]) is True:
+            if self._is_printable(self._firmware[start_offset]) is True:
                 # get string from offset
                 string, start_address, end_address = self._get_prev_string_data(start_offset)
                 self.logger.debug("string:%s, start_address:%s, end_address:%s" % (string, hex(start_address), hex(end_address)))
                 # check string is function name
-                if self._check_func_name(string) is False:
+                if self._check_is_func_name(string) is False:
                     if len(temp_str_tab_data) < count:
                         self.logger.error("Can't find any string table with key index.")
                         return None, None
@@ -325,11 +347,11 @@ class VxTarget(object):
 
         while end_offset < len(self._firmware):
             # find first printable char
-            if self._isprint(self._firmware[end_offset]) is True:
+            if self._is_printable(self._firmware[end_offset]) is True:
                 # get string from offset
                 string, start_address, end_address = self._get_next_string_data(end_offset)
                 # check string is function name
-                if self._check_func_name(string) is False:
+                if self._check_is_func_name(string) is False:
                     if len(temp_str_tab_data) < count:
                         temp_str_tab_data = []
                         end_offset = end_address
@@ -365,6 +387,12 @@ class VxTarget(object):
         return table_start_offset, table_end_offset
 
     def get_string_table(self, str_start_address, str_end_address):
+        """ Get string table data from VxWorks image with string table start and end offset.
+
+        :param str_start_address: string table start address.
+        :param str_end_address: string table end address.
+        :return:
+        """
         self._string_table = []
         offset = str_start_address
         address = offset
@@ -390,6 +418,12 @@ class VxTarget(object):
         self._string_table = str_tab_data
 
     def _check_fix(self, func_index, str_index):
+        """ WTF is this?
+
+        :param func_index:
+        :param str_index:
+        :return:
+        """
         if len(self._symbol_table) < default_check_count:
             count = len(self._symbol_table)
         else:
@@ -407,6 +441,10 @@ class VxTarget(object):
                 return False
 
     def find_loading_address(self):
+        """ Find VxWorks image load address by automatic analysis.
+
+        :return: Load address if found, None otherwise.
+        """
         self.prepare()
         if self._has_symbol is False:
             return None
@@ -426,10 +464,10 @@ class VxTarget(object):
             for str_index in range(len(self._string_table)):
                 if self._string_table[str_index]['length'] == self._symbol_table[func_index]['length']:
                     if self._check_fix(func_index, str_index) is True:
-                        self.logger.info(self._symbol_table[func_index]['string_addr'])
+                        self.logger.info(self._symbol_table[func_index]['func_name_addr'])
                         self.logger.info(self._string_table[str_index]['address'])
                         self.load_address = int(self._symbol_table[func_index][
-                                                     'string_addr'], 16) - int(
+                                                     'func_name_addr'], 16) - int(
                             self._string_table[str_index]['address'], 16)
                         self.logger.info('load address is :%s' % hex(self.load_address))
                         return self.load_address
@@ -438,6 +476,11 @@ class VxTarget(object):
         self.logger.error("we didn't find load address in this firmware, sorry!")
 
     def _check_load_address(self, address):
+        """
+
+        :param address:
+        :return:
+        """
         if not self._has_symbol:
             return False
         if len(self._symbol_table) > default_check_count:
@@ -445,7 +488,7 @@ class VxTarget(object):
         else:
             count = len(self._symbol_table)
         for i in range(count):
-            offset = int(self._symbol_table[i]['string_addr'], 16) - address
+            offset = int(self._symbol_table[i]['func_name_addr'], 16) - address
             if offset <= 0:
                 return False
             # TODO: 方法需要完善，目前只是判断符号表中string指针是否为字符来判断并不可靠。
@@ -457,17 +500,25 @@ class VxTarget(object):
         return True
 
     def quick_test(self):
+        """ Using known load address list to match VxWorks image.
+
+        :return: Load address if match known address, None otherwise.
+        """
         self.prepare()
         if self._has_symbol is False:
             return None
         for address in known_address:
             if self._check_load_address(address):
                 self.load_address = address
-                break
+                return self.load_address
             else:
                 self.logger.info('load address is not:%s' % hex(address))
 
     def cleanup(self):
+        """ Clean up variables.
+
+        :return:
+        """
         self._endian = None
         self.symbol_table_start = None
         self.symbol_table_end = None
@@ -477,7 +528,9 @@ class VxTarget(object):
         self._has_symbol = None
 
 
-#############plugin#################
+# --------------------------------------------------------------------------
+# Plugin
+# --------------------------------------------------------------------------
 class AutoFixIDBForm(idaapi.Form):
     def __init__(self):
         self.invert = False
@@ -508,9 +561,6 @@ Please choose VxWorks main version
             return 1
 
 
-# --------------------------------------------------------------------------
-# Plugin
-# --------------------------------------------------------------------------
 class VxHunter_Plugin_t(idaapi.plugin_t):
     comment = "VxHunter plugin for IDA Pro"
     help = ""
@@ -613,8 +663,9 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
                     sName_type = idc.Dword(ea + offset + 8)
                 idc.MakeName(sName_dst, sName)
                 if sName_type in need_create_function:
+                    # flags = idc.GetFlags(ea)
                     print("Start fix Function %s at %s" % (sName, hex(sName_dst)))
-                    idc.MakeCode(sName_dst)
+                    idc.MakeCode(sName_dst)  # might not need
                     idc.MakeFunction(sName_dst, idc.BADADDR)
             ea += symbol_interval
         print("Fix function by symbol table finish.")
