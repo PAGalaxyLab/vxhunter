@@ -5,7 +5,6 @@ import time
 import struct
 import idc
 import idaapi
-from idc import GetOpType, GetOpnd, ItemEnd
 
 default_check_count = 100
 
@@ -36,12 +35,12 @@ need_create_function = [
 
 class VxTarget(object):
     def __init__(self, firmware, vx_version=5, endian=None, logger=None):
-        '''
+        """
         :param firmware: data of firmware
         :param vx_version: 5 = VxWorks 5.x; 6= VxWorks 6.x
         :param endian: 1 = big endian; 2 = little endian
         :param logger: logger for the target (default: None)
-        '''
+        """
         self._endian = endian
         self._vx_version = vx_version
         self.symbol_table_start = None
@@ -97,8 +96,8 @@ class VxTarget(object):
         :return: True if offset is symbol table, False otherwise.
         """
         check_data = self._firmware[offset:offset + self._symbol_interval * 10]
-        is_big_edian = True
-        is_little_edian = True
+        is_big_endian = True
+        is_little_endian = True
         # check symbol data match sign
         for i in range(10):
             check_data_1 = check_data[i * self._symbol_interval:(i + 1) * self._symbol_interval]
@@ -113,7 +112,7 @@ class VxTarget(object):
                 data2 = check_data[4 + (i + 1) * self._symbol_interval:6 + (i + 1) * self._symbol_interval]
                 if check_data_1 != data2:
                     self.logger.debug("is not big endian")
-                    is_big_edian = False
+                    is_big_endian = False
                     break
 
             # check is little endian
@@ -122,10 +121,10 @@ class VxTarget(object):
                 data2 = check_data[6 + (i + 1) * self._symbol_interval:8 + (i + 1) * self._symbol_interval]
                 if check_data_1 != data2:
                     self.logger.debug("is not little endian")
-                    is_little_edian = False
+                    is_little_endian = False
                     break
 
-            return is_big_edian ^ is_little_edian
+            return is_big_endian ^ is_little_endian
 
         return True
 
@@ -561,6 +560,35 @@ Please choose VxWorks main version
             return 1
 
 
+class FixCodeForm(idaapi.Form):
+    def __init__(self):
+        self.invert = False
+        self.start_address = 0
+        self.end_address = 0
+        super(FixCodeForm, self).__init__(
+            r"""BUTTON YES* Fix Code from image
+
+VxHunter fix code will make all data as code from start_address to end_address. 
+
+Please input start address and end address
+{FormChangeCb}
+<Start address     :{c_StartAddress}>
+<End address     :{c_EndAddress}>
+            """, {
+                'FormChangeCb': self.FormChangeCb(self.OnFormChange),
+                'c_StartAddress': self.NumericInput(value=self.start_address, swidth=40, tp=self.FT_ADDR),
+                'c_EndAddress': self.NumericInput(value=self.end_address, swidth=40, tp=self.FT_ADDR),
+            }
+        )
+        self.Compile()
+
+    def OnFormChange(self, fid):
+        if fid == -2:
+            self.start_address = self.GetControlValue(self.c_StartAddress)
+            self.end_address = self.GetControlValue(self.c_EndAddress)
+            return 1
+
+
 class VxHunter_Plugin_t(idaapi.plugin_t):
     comment = "VxHunter plugin for IDA Pro"
     help = ""
@@ -571,28 +599,25 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
     def init(self):
         # register popup menu handlers
         try:
-            VxHunter_MC_Fix_IDB.register(self, "Auto Fix IDB")
+            # Register Auto Fix IDB handler
+            VxHunterMCFixIDB.register(self, "Auto Fix IDB With symbol table")
+            # Register Fix Code handler
+            VxHunterMCFixCode.register(self, "Fix Code from start address to end address")
 
-        except:
-            pass
+        except Exception as err:
+            print("Got Error!!!: %s" % err)
 
         # setup popup menu
         if idaapi.IDA_SDK_VERSION >= 700:
             # Add menu IDA >= 7.0
-            idaapi.attach_action_to_menu("Edit/VxHunter/Auto Fix IDB",
-                                         VxHunter_MC_Fix_IDB.get_name(), idaapi.SETMENU_APP)
+            idaapi.attach_action_to_menu("Edit/VxHunter/", VxHunterMCFixIDB.get_name(), idaapi.SETMENU_APP)
+            idaapi.attach_action_to_menu("Edit/VxHunter/", VxHunterMCFixCode.get_name(), idaapi.SETMENU_APP)
         else:
-            # add Keypatch menu
-            menu = idaapi.add_menu_item("Edit/VxHunter/", "Auto Fix IDB", "", 1, self.auto_fix_idb, None)
+            # add Vxhunter menu
+            menu = idaapi.add_menu_item("Edit/VxHunter/", "Auto Fix IDB1", "", 1, self.handler_auto_fix_idb, None)
             if menu is not None:
                 pass
-            elif idaapi.IDA_SDK_VERSION < 680:
-                # older IDAPython (such as in IDAPro 6.6) does add new submenu.
-                # in this case, put VxHunter menu in menu Edit \ Patch program
-                # not sure about v6.7, so to be safe we just check against v6.8
-                idaapi.add_menu_item("Edit/Patch program/", "-", "", 0, self.menu_null, None)
-                idaapi.add_menu_item("Edit/Patch program/", "VxHunter:: Auto Fix IDB", "", 0,
-                                     self.auto_fix_idb, None)
+
         print("=" * 80)
         return idaapi.PLUGIN_KEEP
 
@@ -603,11 +628,11 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
     def menu_null(self):
         pass
 
-    def auto_fix_idb(self):
-        f = AutoFixIDBForm()
-        ok = f.Execute()
+    def handler_auto_fix_idb(self):
+        form = AutoFixIDBForm()
+        ok = form.Execute()
         if ok == 1:
-            vx_version = int(f.vx_version)
+            vx_version = int(form.vx_version)
             print("vx_version:%s" % vx_version)
             firmware_path = idaapi.get_input_file_path()
             firmware = open(firmware_path).read()
@@ -627,7 +652,16 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             symbol_table_end = target.symbol_table_end
             load_address = target.load_address
             self.fix_vxworks_idb(load_address, vx_version, symbol_table_start, symbol_table_end)
-        f.Free()
+        form.Free()
+
+    def handler_fix_code(self):
+        form = FixCodeForm()
+        ok = form.Execute()
+        if ok == 1:
+            start_address = int(form.start_address)
+            end_address = int(form.end_address)
+            self.fix_code(start_address, end_address)
+        form.Free()
 
     @staticmethod
     def fix_vxworks_idb(load_address, vx_version, symbol_table_start, symbol_table_end):
@@ -672,12 +706,27 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
         print("Start IDA auto analysis, depending on the size of the firmware this might take a few minutes.")
         idaapi.autoWait()
 
+    @staticmethod
+    def fix_code(start_address, end_address):
+        # Todo: There might be some data in the range of codes.
+        offset = start_address
+        while offset <= end_address:
+            offset = idc.NextAddr(offset)
+            flags = idc.GetFlags(offset)
+            if not idc.isCode(flags):
+                # Todo: Check should use MakeCode or MakeFunction
+                # idc.MakeCode(offset)
+                idc.MakeFunction(offset)
+
+    def fix_ascii(self, start_address, end_address):
+        pass
+
     def run(self, arg):
-        self.auto_fix_idb()
+        self.handler_auto_fix_idb()
 
 
 try:
-    class VxHunter_Menu_Context(idaapi.action_handler_t):
+    class VxHunterMenuContext(idaapi.action_handler_t):
 
         @classmethod
         def get_name(self):
@@ -722,10 +771,21 @@ try:
                 return idaapi.AST_ENABLE_ALWAYS
 
     # context menu for Fix idb
-    class VxHunter_MC_Fix_IDB(VxHunter_Menu_Context):
+    class VxHunterMCFixIDB(VxHunterMenuContext):
         def activate(self, ctx):
-            self.plugin.auto_fix_idb()
+            self.plugin.handler_auto_fix_idb()
             return 1
+
+    class VxHunterMCFixCode(VxHunterMenuContext):
+        def activate(self, ctx):
+            self.plugin.handler_fix_code()
+            return 1
+
+    # class VxHunterMCFixAscii(VxHunterMenuContext):
+    #     def activate(self, ctx):
+    #         self.plugin.memu_3()
+    #         return 1
+
 
 except:
     pass
