@@ -521,3 +521,44 @@ class VxTarget(object):
         self._symbol_table = []
         self.load_address = None
         self._has_symbol = None
+
+    def create_ida_script(self, fname=None):
+        ida_script = ""
+        ida_script_file = open(fname, 'w')
+        if fname:
+            ida_script += '''from idaapi import *\nimport idc\nimport time\n'''
+        if self._vx_version == 5:
+            ida_script += "symbol_interval = 16\n"
+        elif self._vx_version == 6:
+            ida_script += "symbol_interval = 20\n"
+
+        ida_script += "load_address = %s\n" % hex(self.load_address)
+        ida_script += "symbol_table_start = %s + load_address\n" % hex(self.symbol_table_start)
+        ida_script += "symbol_table_end = %s + load_address\n" % hex(self.symbol_table_end)
+        ida_script += """ea = symbol_table_start
+symbol_table_end = symbol_table_end
+while load_address >= 0x70000000:
+    rebase_program(0x70000000, 0x0008)
+    load_address -= 0x70000000
+rebase_program(load_address, 0x0008)
+autoWait()
+while ea < symbol_table_end:
+    # for VxWorks 6 unknown symbol format
+    if Byte(ea + symbol_table_end - 2) == 3:
+        ea += symbol_interval
+        continue
+    offset = 4
+    if idaapi.IDA_SDK_VERSION >= 700:
+        idc.create_strlit(Dword(ea + offset), BADADDR)
+    else:
+        MakeStr(Dword(ea + offset), BADADDR)
+    sName = GetString(Dword(ea + offset), -1, ASCSTR_C)
+    print(sName)
+    if sName:
+        eaFunc = Dword(ea + offset + 4)
+        MakeName(eaFunc, sName)
+        MakeCode(eaFunc)
+        MakeFunction(eaFunc, BADADDR)
+    ea += symbol_interval
+        """
+        ida_script_file.write(ida_script)
