@@ -15,7 +15,7 @@ Firmware analyze tool is tested with follow devices firmware:
 * Hirschmann PowerMICE - Industrial ETHERNET Switch
 
 
-## VxSerial Debugger
+## VxSerial Debugger - will opensource soon
 The serial debugger tool is written in Python and based on VxWorks command line, usually we can get that command line from VxWorks device using serial port. 
 
 The serial debugger tool using memory read/write command to inject debugger shellcode into targat system, the shellcode is dynamic generation by keystone-engine. 
