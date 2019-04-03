@@ -1,6 +1,7 @@
 # coding=utf-8
 import logging
 import struct
+import sys
 # Adds a comment to a program.
 
 
@@ -210,7 +211,7 @@ class VxTarget(object):
             if self._endian == 1:
                 unpack_format = '>I'
             elif self._endian == 2:
-                unpack_format = 'I'
+                unpack_format = '<I'
             func_name_addr = int(struct.unpack(unpack_format, func_name_addr)[0])
             self.logger.debug("func_name_addr: %s" % func_name_addr)
             func_code_addr = int(struct.unpack(unpack_format, func_code_addr)[0])
@@ -565,7 +566,7 @@ try:
         firmware_path = currentProgram.domainFile.getMetadata()['Executable Location']
         firmware = open(firmware_path, 'rb').read()
         target = VxTarget(firmware=firmware, vx_version=vx_version)
-        target.logger.setLevel(logging.DEBUG)
+        # target.logger.setLevel(logging.DEBUG)
         target.quick_test()
         if target.load_address is None:
             target.find_loading_address()
