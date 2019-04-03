@@ -1,11 +1,15 @@
 # VxHunter 
-A ToolSet for VxWorks Based Embedded Device Analyses. 
+A ToolSet for VxWorks Based Embedded Device Analyses.
 
 
 ## Firmware Analyze Tool
-The firmware analyze tool is an IDA plugin written in Python, mainly used for analyze firmware loading address, fix function name with symbol table and etc.
+The firmware analyze tool is plugins written in Python, mainly used for analyze firmware loading address, fix function name with symbol table and etc.
 
-The firmware analyze tool is tested with follow devices firmware:
+supported reverse tool: 
+* IDA Pro 7.x
+* ghidra 9.0.1
+
+Firmware analyze tool is tested with follow devices firmware:
 * Schneider 140NOE77101 - Ethernet network TCP/IP module
 * Siemens SCALANCE-X208/SCALANCE-X216/SCALANCE-X308 - Siemens SCALANCE X Switch
 * Hirschmann PowerMICE - Industrial ETHERNET Switch
