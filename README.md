@@ -15,6 +15,15 @@ Firmware analyze tool is tested with follow devices firmware:
 * Hirschmann PowerMICE - Industrial ETHERNET Switch
 
 
+### IDA Demo
+![](screenshot/VxHunter_IDA_480.gif)
+
+
+### Ghidra Demo
+![](screenshot/screenshot/VxHunter_ghidra_720.gif)
+
+
+
 ## VxSerial Debugger - will opensource soon
 The serial debugger tool is written in Python and based on VxWorks command line, usually we can get that command line from VxWorks device using serial port. 
 
