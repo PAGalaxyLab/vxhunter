@@ -20,7 +20,7 @@ Firmware analyze tool is tested with follow devices firmware:
 
 
 ### Ghidra Demo
-![](screenshot/screenshot/VxHunter_ghidra_720.gif)
+![](screenshot/VxHunter_ghidra_720.gif)
 
 
 
