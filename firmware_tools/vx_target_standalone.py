@@ -1,9 +1,6 @@
 # coding=utf-8
 import logging
 import struct
-from ghidra.util.task import TaskMonitor
-from ghidra.program.model.symbol.SourceType import USER_DEFINED
-
 
 default_check_count = 100
 
@@ -540,90 +537,43 @@ class VxTarget(object):
         self.load_address = None
         self._has_symbol = None
 
+    def create_ida_script(self, fname=None):
+        ida_script = ""
+        ida_script_file = open(fname, 'w')
+        if fname:
+            ida_script += '''from idaapi import *\nimport idc\nimport time\n'''
+        if self._vx_version == 5:
+            ida_script += "symbol_interval = 16\n"
+        elif self._vx_version == 6:
+            ida_script += "symbol_interval = 20\n"
 
-def get_address_type(target_address):
-    address = None
-    mem_min = currentProgram.memory.getMinAddress()
-    mem_max = currentProgram.memory.getMaxAddress()
-    if int(mem_min.toString(), 16) <= target_address <= int(mem_max.toString(), 16):
-        offset = target_address - int(mem_min.toString(), 16)
-        address = mem_min.add(offset)
-    return address
-
-
-try:
-    vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
-    if vx_version == u"5.x":
-        vx_version = 5
-
-    elif vx_version == u"6.x":
-        vx_version = 6
-
-    if vx_version:
-        firmware_path = currentProgram.domainFile.getMetadata()['Executable Location']
-        firmware = open(firmware_path, 'rb').read()
-        target = VxTarget(firmware=firmware, vx_version=vx_version)
-        # target.logger.setLevel(logging.DEBUG)
-        target.quick_test()
-        if target.load_address is None:
-            target.find_loading_address()
-
-        if target.load_address:
-            symbol_table_start = target.symbol_table_start
-            symbol_table_end = target.symbol_table_end
-            load_address = target.load_address
-            target.logger.info("load_address:%s" % hex(load_address))
-
-            # Rebase_image
-            target_block = currentProgram.memory.blocks[0]
-            print("target_block: %s" % target_block)
-            address = target_block.getStart()
-            print("address: %s" % address)
-            offset = load_address - int(address.toString(), 16)
-            print("offset: %s" % offset)
-            if offset != 0:
-                address = address.add(offset)
-                currentProgram.memory.moveBlock(target_block, address, TaskMonitor.DUMMY)
-
-            # Rename functions
-            symbol_table_start = address.add(target.symbol_table_start)
-            symbol_table_end = address.add(target.symbol_table_end)
-            symbol_interval = 16
-            if vx_version == 6:
-                symbol_interval = 20
-            ea = symbol_table_start
-            while ea < symbol_table_end:
-                offset = 4
-                symbol_flag = getInt(ea.add(symbol_interval - 4))
-                symbol_name_address = get_address_type(getInt(ea.add(offset)))
-                symbol_dest_address = get_address_type(getInt(ea.add(offset + 4)))
-                print("symbol_address: %s" % ea)
-                print("symbol_flag: %s" % symbol_flag)
-                print("symbol_name_address: %s" % symbol_name_address)
-                print("symbol_dest_address: %s" % symbol_dest_address)
-                if not symbol_dest_address:
-                    ea = ea.add(symbol_interval)
-                    continue
-
-                # Get symbol_name
-                if getDataAt(symbol_name_address):
-                    print("removeDataAt: %s" % symbol_name_address)
-                    removeDataAt(symbol_name_address)
-                if getInstructionAt(symbol_dest_address):
-                    print("removeInstructionAt: %s" % symbol_dest_address)
-                    removeInstructionAt(symbol_dest_address)
-                try:
-                    symbol_name_string = createAsciiString(symbol_name_address).getValue()
-                    print("symbol_name_string: %s" % symbol_name_string)
-                    if symbol_name_string and symbol_flag in need_create_function:
-                            disassemble(symbol_dest_address)
-                            createFunction(symbol_dest_address, symbol_name_string)
-                            if getFunctionAt(symbol_dest_address):
-                                getFunctionAt(symbol_dest_address).setName(symbol_name_string, USER_DEFINED);
-                except:
-                    pass
-                print("keep going!")
-                ea = ea.add(symbol_interval)
-
-except Exception as err:
-    print(err)
+        ida_script += "load_address = %s\n" % hex(self.load_address)
+        ida_script += "symbol_table_start = %s + load_address\n" % hex(self.symbol_table_start)
+        ida_script += "symbol_table_end = %s + load_address\n" % hex(self.symbol_table_end)
+        ida_script += """ea = symbol_table_start
+symbol_table_end = symbol_table_end
+while load_address >= 0x70000000:
+    rebase_program(0x70000000, 0x0008)
+    load_address -= 0x70000000
+rebase_program(load_address, 0x0008)
+autoWait()
+while ea < symbol_table_end:
+    # for VxWorks 6 unknown symbol format
+    if Byte(ea + symbol_table_end - 2) == 3:
+        ea += symbol_interval
+        continue
+    offset = 4
+    if idaapi.IDA_SDK_VERSION >= 700:
+        idc.create_strlit(Dword(ea + offset), BADADDR)
+    else:
+        MakeStr(Dword(ea + offset), BADADDR)
+    sName = GetString(Dword(ea + offset), -1, ASCSTR_C)
+    print(sName)
+    if sName:
+        eaFunc = Dword(ea + offset + 4)
+        MakeName(eaFunc, sName)
+        MakeCode(eaFunc)
+        MakeFunction(eaFunc, BADADDR)
+    ea += symbol_interval
+        """
+        ida_script_file.write(ida_script)
