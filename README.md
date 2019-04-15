@@ -42,7 +42,7 @@ The serial debugger tool support functions:
 This is an example script to debug CVE-2018-19528 vulnerability on TP-Link TL-WR886N-V7 deivce with Firmware V1.1.0.
 
 
-[serial_debugeexample script](serial_debuger_example.py)
+[serial_debugger example script](serial_debugger_example.py)
 
 Demo Video
 
