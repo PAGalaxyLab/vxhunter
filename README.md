@@ -24,7 +24,7 @@ Tested firmware:
 
 
 
-## VxSerial Debugger - will opensource soon
+## VxSerial Debugger - Beta
 The serial debugger tool is written in Python and based on VxWorks command line, usually we can get that command line from VxWorks device using serial port. 
 
 The serial debugger tool using memory read/write command to inject debugger shellcode into targat system, the shellcode is dynamic generation by keystone-engine. 
@@ -36,3 +36,14 @@ The serial debugger tool support functions:
 * Conditional breakpoint, Python based conditional function, return True to break, False to keep running.
 * Task status viewer(stacks, register).
 * VxWorks struct viewer(netpool, clBlk, etc).
+
+
+### Example
+This is an example script to debug CVE-2018-19528 vulnerability on TP-Link TL-WR886N-V7 deivce with Firmware V1.1.0.
+
+
+[serial_debugeexample script](serial_debuger_example.py)
+
+Demo Video
+
+[![Demo Video](https://img.youtube.com/vi/ulO8MsoDLLk/0.jpg)](https://www.youtube.com/watch?v=ulO8MsoDLLk)
