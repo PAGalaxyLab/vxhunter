@@ -541,16 +541,6 @@ class VxTarget(object):
         self._has_symbol = None
 
 
-def get_address_type(target_address):
-    address = None
-    mem_min = currentProgram.memory.getMinAddress()
-    mem_max = currentProgram.memory.getMaxAddress()
-    if int(mem_min.toString(), 16) <= target_address <= int(mem_max.toString(), 16):
-        offset = target_address - int(mem_min.toString(), 16)
-        address = mem_min.add(offset)
-    return address
-
-
 try:
     vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
     if vx_version == u"5.x":
@@ -577,17 +567,13 @@ try:
             # Rebase_image
             target_block = currentProgram.memory.blocks[0]
             print("target_block: %s" % target_block)
-            address = target_block.getStart()
+            address = toAddr(load_address)
             print("address: %s" % address)
-            offset = load_address - int(address.toString(), 16)
-            print("offset: %s" % offset)
-            if offset != 0:
-                address = address.add(offset)
-                currentProgram.memory.moveBlock(target_block, address, TaskMonitor.DUMMY)
+            currentProgram.memory.moveBlock(target_block, address, TaskMonitor.DUMMY)
 
             # Rename functions
-            symbol_table_start = address.add(target.symbol_table_start)
-            symbol_table_end = address.add(target.symbol_table_end)
+            symbol_table_start = toAddr(target.symbol_table_start + target.load_address)
+            symbol_table_end = toAddr(target.symbol_table_end + target.load_address)
             symbol_interval = 16
             if vx_version == 6:
                 symbol_interval = 20
@@ -595,8 +581,8 @@ try:
             while ea < symbol_table_end:
                 offset = 4
                 symbol_flag = getInt(ea.add(symbol_interval - 4))
-                symbol_name_address = get_address_type(getInt(ea.add(offset)))
-                symbol_dest_address = get_address_type(getInt(ea.add(offset + 4)))
+                symbol_name_address = toAddr(getInt(ea.add(offset)))
+                symbol_dest_address = toAddr(getInt(ea.add(offset + 4)))
                 print("symbol_address: %s" % ea)
                 print("symbol_flag: %s" % symbol_flag)
                 print("symbol_name_address: %s" % symbol_name_address)
