@@ -611,5 +611,8 @@ try:
                 print("keep going!")
                 ea = ea.add(symbol_interval)
 
+        else:
+            popup("Can't find symbols in binary")
+
 except Exception as err:
     print(err)
