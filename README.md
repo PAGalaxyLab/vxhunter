@@ -16,12 +16,13 @@ Tested firmware:
 
 
 ### IDA Demo
-![](screenshot/VxHunter_IDA_480.gif)
+![](docs/images/VxHunter_IDA_480.gif)
 
 
 ### Ghidra Demo
-![](screenshot/VxHunter_ghidra_720.gif)
+[How to use VxHunter firmware tools in Ghidra](docs/How_to_use_vxhunter_firmware_tools_in_ghidra.md)
 
+![](docs/images/VxHunter_ghidra_720.gif)
 
 
 ## VxSerial Debugger - Beta
