@@ -559,8 +559,6 @@ try:
             target.find_loading_address()
 
         if target.load_address:
-            symbol_table_start = target.symbol_table_start
-            symbol_table_end = target.symbol_table_end
             load_address = target.load_address
             target.logger.info("load_address:%s" % hex(load_address))
 
