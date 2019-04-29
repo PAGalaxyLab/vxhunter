@@ -3,7 +3,10 @@ import logging
 import struct
 from ghidra.util.task import TaskMonitor
 from ghidra.program.model.symbol.SourceType import USER_DEFINED
-
+from ghidra.app.cmd.label import DemanglerCmd
+from ghidra.program.model.util import CodeUnitInsertionException
+from ghidra.app.util.demangler import DemangledException
+from ghidra.app.util.demangler.gnu import GnuDemangler
 
 default_check_count = 100
 
@@ -24,6 +27,18 @@ symbol_format_sign_6 = [
     '\x00\x00\x00\x00\x00\x00\x07\x00',  # Variable
     '\x00\x00\x00\x00\x00\x00\x09\x00',  # Variable
     '\x00\x00\x00\x00\x00\x00\x11\x00'
+]
+
+sym_flags = [
+    0,      # Undefined Symbol
+    2,      # Local Absolute
+    3,      # Global Absolute
+    4,      # Local .text
+    5,      # Global .text
+    6,      # Local Data
+    7,      # Global Data
+    8,      # Local BSS
+    9,      # Global BSS
 ]
 
 need_create_function = [
@@ -557,8 +572,10 @@ try:
         target.quick_test()
         if target.load_address is None:
             target.find_loading_address()
-
+        demangler = GnuDemangler()
+        can_demangle = demangler.canDemangle(currentProgram)
         if target.load_address:
+            ghidra_sym_tbl = currentProgram.getSymbolTable()
             load_address = target.load_address
             target.logger.info("load_address:%s" % hex(load_address))
 
@@ -577,6 +594,7 @@ try:
                 symbol_interval = 20
             ea = symbol_table_start
             while ea < symbol_table_end:
+                symbol_name_string = None
                 offset = 4
                 symbol_flag = getInt(ea.add(symbol_interval - 4))
                 symbol_name_address = toAddr(getInt(ea.add(offset)))
@@ -596,16 +614,57 @@ try:
                 if getInstructionAt(symbol_dest_address):
                     print("removeInstructionAt: %s" % symbol_dest_address)
                     removeInstructionAt(symbol_dest_address)
+
                 try:
                     symbol_name_string = createAsciiString(symbol_name_address).getValue()
                     print("symbol_name_string: %s" % symbol_name_string)
+                except CodeUnitInsertionException:
+                    # Todo: Need find a way to get subString
+                    ea = ea.add(symbol_interval)
+                    continue
+
+                except:
+                    ea = ea.add(symbol_interval)
+                    continue
+
+                try:
+                    # Demangle symName
+                    sym_demangled_name = None
+                    if can_demangle:
+                        try:
+                            sym_demangled = demangler.demangle(symbol_name_string, False)
+                            if sym_demangled:
+                                sym_demangled_name = sym_demangled.getSignature(False)
+
+                        except DemangledException:
+                            sym_demangled_name = None
+
+                        if sym_demangled_name:
+                            print("sym_demangled_name: %s" % sym_demangled_name)
+
                     if symbol_name_string and symbol_flag in need_create_function:
                             disassemble(symbol_dest_address)
                             createFunction(symbol_dest_address, symbol_name_string)
                             if getFunctionAt(symbol_dest_address):
-                                getFunctionAt(symbol_dest_address).setName(symbol_name_string, USER_DEFINED);
-                except:
-                    pass
+                                getFunctionAt(symbol_dest_address).setName(symbol_name_string, USER_DEFINED)
+                                if sym_demangled_name:
+                                    DemanglerCmd(symbol_dest_address, symbol_name_string).applyTo(currentProgram,
+                                                                                                  monitor)
+                                    ghidra_sym_tbl.removeSymbolSpecial(
+                                        getSymbol(symbol_name_string, currentProgram.getGlobalNamespace())
+                                    )
+
+                    else:
+                        createLabel(symbol_dest_address, symbol_name_string, True)
+                        if sym_demangled_name:
+                            DemanglerCmd(symbol_dest_address, symbol_name_string).applyTo(currentProgram, monitor)
+                            ghidra_sym_tbl.removeSymbolSpecial(
+                                getSymbol(symbol_name_string, currentProgram.getGlobalNamespace())
+                            )
+
+                except Exception as err:
+                    print("Create function Failed: %s" % err)
+
                 print("keep going!")
                 ea = ea.add(symbol_interval)
 
