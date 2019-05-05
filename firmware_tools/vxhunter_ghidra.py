@@ -3,10 +3,10 @@ import logging
 import struct
 from ghidra.util.task import TaskMonitor
 from ghidra.program.model.symbol.SourceType import USER_DEFINED
-from ghidra.app.cmd.label import DemanglerCmd
 from ghidra.program.model.util import CodeUnitInsertionException
 from ghidra.app.util.demangler import DemangledException
 from ghidra.app.util.demangler.gnu import GnuDemangler
+from ghidra.program.model.listing.CodeUnit import PLATE_COMMENT
 
 default_check_count = 100
 
@@ -556,6 +556,45 @@ class VxTarget(object):
         self._has_symbol = None
 
 
+def demangle_function(demangle_string):
+    function_return = None
+    function_parameters = None
+    function_name_end = len(demangle_string)
+
+    # get parameters
+    index = len(demangle_string) - 1
+    if demangle_string[-1] == ')':
+        # have parameters
+        parentheses_count = 0
+        while index >= 0:
+            if demangle_string[index] == ')':
+                parentheses_count += 1
+
+            elif demangle_string[index] == '(':
+                parentheses_count -= 1
+
+            index -= 1
+
+            if parentheses_count == 0:
+                break
+
+        function_parameters = demangle_string[index + 2:-1]
+        function_name_end = index
+
+    # get function name
+    while index >= 0:
+        if demangle_string[index] == ' ':
+            break
+        else:
+            index -= 1
+    function_name_start = index
+    function_name = demangle_string[function_name_start + 1:function_name_end + 1]
+
+    # get function return
+    function_return = demangle_string[:function_name_start]
+    return function_return, function_name, function_parameters
+
+
 try:
     vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
     if vx_version == u"5.x":
@@ -573,6 +612,7 @@ try:
         if target.load_address is None:
             target.find_loading_address()
         demangler = GnuDemangler()
+        listing = currentProgram.getListing()
         can_demangle = demangler.canDemangle(currentProgram)
         if target.load_address:
             ghidra_sym_tbl = currentProgram.getSymbolTable()
@@ -632,7 +672,12 @@ try:
                     sym_demangled_name = None
                     if can_demangle:
                         try:
-                            sym_demangled = demangler.demangle(symbol_name_string, False)
+                            sym_demangled = demangler.demangle(symbol_name_string, True)
+
+                            if not sym_demangled:
+                                # some mangled function name didn't start with mangled prefix
+                                sym_demangled = demangler.demangle(symbol_name_string, False)
+
                             if sym_demangled:
                                 sym_demangled_name = sym_demangled.getSignature(False)
 
@@ -642,25 +687,27 @@ try:
                         if sym_demangled_name:
                             print("sym_demangled_name: %s" % sym_demangled_name)
 
-                    if symbol_name_string and symbol_flag in need_create_function:
-                            disassemble(symbol_dest_address)
-                            createFunction(symbol_dest_address, symbol_name_string)
-                            if getFunctionAt(symbol_dest_address):
-                                getFunctionAt(symbol_dest_address).setName(symbol_name_string, USER_DEFINED)
-                                if sym_demangled_name:
-                                    DemanglerCmd(symbol_dest_address, symbol_name_string).applyTo(currentProgram,
-                                                                                                  monitor)
-                                    ghidra_sym_tbl.removeSymbolSpecial(
-                                        getSymbol(symbol_name_string, currentProgram.getGlobalNamespace())
-                                    )
-
+                    if symbol_name_string and (symbol_flag in need_create_function):
+                        print("Start disassemble function %s at address %s" % (symbol_name_string,
+                                                                               symbol_dest_address.toString()))
+                        disassemble(symbol_dest_address)
+                        function = createFunction(symbol_dest_address, symbol_name_string)
+                        if function and sym_demangled_name:
+                            # Add demangled string to comment
+                            codeUnit = listing.getCodeUnitAt(symbol_dest_address)
+                            codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
+                            # Rename function
+                            function_return, function_name, function_parameters = demangle_function(sym_demangled_name)
+                            print("Demangled function name is: %s" % function_name)
+                            print("Demangled function return is: %s" % function_return)
+                            print("Demangled function parameters is: %s" % function_parameters)
+                            function.setName(function_name, USER_DEFINED)
+                            # Todo: Add parameters later
                     else:
                         createLabel(symbol_dest_address, symbol_name_string, True)
                         if sym_demangled_name:
-                            DemanglerCmd(symbol_dest_address, symbol_name_string).applyTo(currentProgram, monitor)
-                            ghidra_sym_tbl.removeSymbolSpecial(
-                                getSymbol(symbol_name_string, currentProgram.getGlobalNamespace())
-                            )
+                            codeUnit = listing.getCodeUnitAt(symbol_dest_address)
+                            codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
 
                 except Exception as err:
                     print("Create function Failed: %s" % err)
