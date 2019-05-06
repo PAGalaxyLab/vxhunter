@@ -166,7 +166,7 @@ def load_symbols(file_data, is_big_endian=True):
             except:
                 print("Can't add label")
 
-try:c
+try:
     symbol_file = askFile("Open symbol file", "")
     symbol_file_data = file(symbol_file.absolutePath).read()
     endian = currentProgram.domainFile.getMetadata()[u'Endian']
