@@ -3,6 +3,9 @@ import logging
 import struct
 from ghidra.util.task import TaskMonitor
 from ghidra.program.model.symbol.SourceType import USER_DEFINED
+from ghidra.app.util.demangler import DemangledException
+from ghidra.app.util.demangler.gnu import GnuDemangler
+from ghidra.program.model.listing.CodeUnit import PLATE_COMMENT
 
 
 function_name_key_words = ['bzero', 'usrInit', 'bfill']
@@ -32,6 +35,44 @@ def get_string(offset):
             break
     return string
 
+def demangle_function(demangle_string):
+    function_return = None
+    function_parameters = None
+    function_name_end = len(demangle_string)
+
+    # get parameters
+    index = len(demangle_string) - 1
+    if demangle_string[-1] == ')':
+        # have parameters
+        parentheses_count = 0
+        while index >= 0:
+            if demangle_string[index] == ')':
+                parentheses_count += 1
+
+            elif demangle_string[index] == '(':
+                parentheses_count -= 1
+
+            index -= 1
+
+            if parentheses_count == 0:
+                break
+
+        function_parameters = demangle_string[index + 2:-1]
+        function_name_end = index
+
+    # get function name
+    while index >= 0:
+        if demangle_string[index] == ' ':
+            break
+        else:
+            index -= 1
+    function_name_start = index
+    function_name = demangle_string[function_name_start + 1:function_name_end + 1]
+
+    # get function return
+    function_return = demangle_string[:function_name_start]
+    return function_return, function_name, function_parameters
+
 
 def load_symbols(file_data, is_big_endian=True):
     symbol_list = []
@@ -40,6 +81,9 @@ def load_symbols(file_data, is_big_endian=True):
     else:
         unpack_format = '<I'
 
+    # Init demangler
+    demangler = GnuDemangler()
+    can_demangle = demangler.canDemangle(currentProgram)
     symbol_count = struct.unpack(unpack_format, file_data[4:8])[0]
     print("symbol_count: %s" % symbol_count)
     symbol_offset = 8
@@ -64,11 +108,30 @@ def load_symbols(file_data, is_big_endian=True):
         print("symbol_name: %s" % symbol_name)
         symbol_address = struct.unpack(unpack_format, symbol_data[-4:])[0]
         symbol_list.append([flag, symbol_name, symbol_address])
-    print("3")
+
     # load symbols
     for symbol_data in symbol_list:
         flag, symbol_name, symbol_address = symbol_data
         symbol_address = toAddr(symbol_address)
+        # Demangle symbol_name
+        sym_demangled_name = None
+        if can_demangle:
+            try:
+                sym_demangled = demangler.demangle(symbol_name, True)
+
+                if not sym_demangled:
+                    # some mangled function name didn't start with mangled prefix
+                    sym_demangled = demangler.demangle(symbol_name, False)
+
+                if sym_demangled:
+                    sym_demangled_name = sym_demangled.getSignature(False)
+
+            except DemangledException:
+                sym_demangled_name = None
+
+            if sym_demangled_name:
+                print("sym_demangled_name: %s" % sym_demangled_name)
+
         if flag == 0x54:
             print("Start fix Function %s at 0x%s" % (symbol_name, symbol_address))
             if getInstructionAt(symbol_address):
@@ -76,19 +139,43 @@ def load_symbols(file_data, is_big_endian=True):
                 removeInstructionAt(symbol_address)
             try:
                 disassemble(symbol_address)
-                createFunction(symbol_address, symbol_name)
+                function = createFunction(symbol_address, symbol_name)
+                if function and sym_demangled_name:
+                    # Add demangled string to comment
+                    codeUnit = listing.getCodeUnitAt(symbol_address)
+                    codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
+                    # Rename function
+                    function_return, function_name, function_parameters = demangle_function(sym_demangled_name)
+                    print("Demangled function name is: %s" % function_name)
+                    print("Demangled function return is: %s" % function_return)
+                    print("Demangled function parameters is: %s" % function_parameters)
+                    function.setName(function_name, USER_DEFINED)
+
                 if getFunctionAt(symbol_address):
                     getFunctionAt(symbol_address).setName(symbol_name, USER_DEFINED)
 
             except Exception as err:
-                pass
 
+                print("Create function Failed: %s" % err)
 
-try:
+        else:
+            try:
+                print("Start add label %s at address: %s" % (symbol_name, symbol_address))
+                createLabel(symbol_address, symbol_name, True)
+
+            except:
+                print("Can't add label")
+
+try:c
     symbol_file = askFile("Open symbol file", "")
     symbol_file_data = file(symbol_file.absolutePath).read()
-    if is_vx_symbol_file(symbol_file_data):
-        load_symbols(symbol_file_data)
+    endian = currentProgram.domainFile.getMetadata()[u'Endian']
+    if endian == u'Big':
+        is_big_endian = True
+    else:
+        is_big_endian = False
+    if is_vx_symbol_file(symbol_file_data, is_big_endian=is_big_endian):
+        load_symbols(symbol_file_data, is_big_endian=is_big_endian)
 
 except Exception as err:
     print(err)
