@@ -7,6 +7,7 @@ from ghidra.program.model.util import CodeUnitInsertionException
 from ghidra.app.util.demangler import DemangledException
 from ghidra.app.util.demangler.gnu import GnuDemangler
 from ghidra.program.model.listing.CodeUnit import PLATE_COMMENT
+from ghidra.program.model.data import DataType
 
 default_check_count = 100
 
@@ -68,6 +69,7 @@ class VxTarget(object):
             self._symbol_interval = 16
         elif self._vx_version == 6:
             self._symbol_interval = 20
+
         if logger is None:
             self.logger = logging.getLogger('target')
             self.logger.setLevel(logging.INFO)
@@ -658,8 +660,9 @@ try:
                 try:
                     symbol_name_string = createAsciiString(symbol_name_address).getValue()
                     print("symbol_name_string: %s" % symbol_name_string)
-                except CodeUnitInsertionException:
+                except CodeUnitInsertionException as err:
                     # Todo: Need find a way to get subString
+                    print("Got CodeUnitInsertionException: {}".format(err))
                     ea = ea.add(symbol_interval)
                     continue
 
@@ -681,7 +684,8 @@ try:
                             if sym_demangled:
                                 sym_demangled_name = sym_demangled.getSignature(False)
 
-                        except DemangledException:
+                        except DemangledException as err:
+                            # print("Got DemangledException: {}".format(err))
                             sym_demangled_name = None
 
                         if sym_demangled_name:
@@ -691,7 +695,10 @@ try:
                         print("Start disassemble function %s at address %s" % (symbol_name_string,
                                                                                symbol_dest_address.toString()))
                         disassemble(symbol_dest_address)
+                        # TODO: find out why createFunction didn't set the function name.
                         function = createFunction(symbol_dest_address, symbol_name_string)
+                        # use createLabel to rename function for now.
+                        createLabel(symbol_dest_address, symbol_name_string, True)
                         if function and sym_demangled_name:
                             # Add demangled string to comment
                             codeUnit = listing.getCodeUnitAt(symbol_dest_address)
