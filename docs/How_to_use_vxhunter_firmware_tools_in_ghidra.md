@@ -15,15 +15,15 @@ Don't analyze image this time, since we don't known the correct load address.
 ![](images/not_analyze_now.png)
 
 
-## step 2: Running VxHunter script
+## step 2: Running VxHunter firmware init script
 
-Run VxHunter vxhunter_ghidra.py in script manager, this script will rebase image to correct load address and fix the function name.
+Run VxHunter vxhunter_firmware_init.py in script manager, this script will rebase image to correct load address and fix the function name.
 
-![](images/VxHunter_ghidra_720.gif)
+![](images/VxHunter_ghidra_firmware_init_720.gif)
 
 
-## step 3: Enjoy
+## step 3: Analyze hard coded accounts, compiled in services using vxhunter_analysis script
 
-All done, you can start analyze the firmware.
+All done, you can start analyze the firmware, have fun.
 
-![](images/After_script_run_in_ghidra_01.png)
+![](images/VxHunter_ghidra_analysis_720.gif)

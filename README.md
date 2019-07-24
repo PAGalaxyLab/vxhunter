@@ -7,7 +7,7 @@ The firmware analyze tool is plugins written in Python, mainly used for analyze 
 
 supported reverse tool: 
 * IDA Pro 7.x
-* Ghidra 9.0.1
+* Ghidra 9.0.4
 
 Tested firmware:
 * Schneider 140NOE77101 - Ethernet network TCP/IP module
@@ -22,7 +22,15 @@ Tested firmware:
 ### Ghidra Demo
 [How to use VxHunter firmware tools in Ghidra](docs/How_to_use_vxhunter_firmware_tools_in_ghidra.md)
 
-![](docs/images/VxHunter_ghidra_720.gif)
+
+#### vxhunter_firmware_init.py
+![](docs/images/VxHunter_ghidra_firmware_init_720.gif)
+
+
+#### vxhunter_analysis.py
+After execute `vxhunter_firmware_init.py`, we can use `vxhunter_analysis.py` script to analyze VxWorks firmware.
+This script will search hard coded accounts, compiled in services and some other info. 
+![](docs/images/VxHunter_ghidra_analysis_720.gif)
 
 
 ## VxSerial Debugger - Beta
