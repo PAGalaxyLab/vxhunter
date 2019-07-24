@@ -3,10 +3,14 @@ from ghidra.program.model.pcode import HighParam, PcodeOp, PcodeOpAST
 from ghidra.program.model.address import GenericAddress
 from ghidra.app.util.demangler import DemangledException
 from ghidra.app.util.demangler.gnu import GnuDemangler
+from ghidra.program.database.code import DataDB
+from ghidra.program.model.mem import *
 import logging
 import time
 import struct
 
+
+debug = False
 
 endian = currentProgram.domainFile.getMetadata()[u'Endian']
 if endian == u'Big':
@@ -22,6 +26,16 @@ if process_type.endswith(u'64'):
 
 demangler = GnuDemangler()
 can_demangle = demangler.canDemangle(currentProgram)
+
+
+vxworks_service_keyword = {
+    "wdbDbg": ["wdbDbgArchInit"],
+    "ftpd": ["ftpdInit"],
+    "tftpd": ["tftpdInit"],
+    "snmpd": ["snmpdInit"],
+    "sshd": ["sshdInit"],
+    "shell": ["shellInit"],
+}
 
 
 def demangle_function_name(function_name):
@@ -256,12 +270,17 @@ class ParmTrace(object):
                     return parms
 
 
-def get_call_parm_value(call_address):
+def get_call_parm_value(call_address, search_functions=None):
+    """
+
+    :param call_address:
+    :param search_functions: function name list to search
+    :return:
+    """
     target_function = getFunctionAt(call_address)
     parms_data = {}
     cache_data = {}
     if target_function:
-        function_name = target_function.name
         target_references = getReferencesTo(target_function.getEntryPoint())
         for target_reference in target_references:
             # Filter reference type
@@ -280,6 +299,11 @@ def get_call_parm_value(call_address):
             # print("function: {}".format(function))
             if not function:
                 continue
+
+            # search only targeted function
+            if search_functions:
+                if function.name not in search_functions:
+                    continue
 
             target = ParmTrace(function=function, call_address=call_addr)
             function_address = function.getEntryPoint().offset
@@ -335,14 +359,52 @@ def get_call_parm_value(call_address):
         return parms_data
 
 
+def analyze_bss():
+    print('{:-^60}'.format('analyze bss info'))
+    target_function = getFunction("bzero")
+    if target_function:
+        parms_data = get_call_parm_value(call_address=target_function.getEntryPoint(), search_functions=['sysStart',
+                                                                                                         'usrInit'])
+        for call_addr in parms_data:
+            call_parms = parms_data[call_addr]
+            # print(call_parms)
+            bss_start_address = call_parms['parms']['parm_1']['parm_value']
+            bss_length = call_parms['parms']['parm_2']['parm_value']
+            print("bss_start_address: {}".format(hex(bss_start_address)))
+            print("bss_end_address: {}".format(hex(bss_start_address + bss_length - 1)))
+            print("bss_length: {}".format(hex(bss_length)))
+            if not is_address_in_current_program(toAddr(bss_start_address)):
+                print("bss block not in current program, you should add it manually")
+                # TODO: automatic create bss block, after find out how createBlock function work.
+                # createBlock("bss", toAddr(bss_start_address), bss_length)
+
+    else:
+        print("Can't find bzero function in firmware")
+
+    print('{}\r\n'.format("-" * 60))
+
+
 def analyze_login_accouts():
-    print('{:-^60}'.format('analyze loginUserAdd function'))
+    hard_coded_accounts = {}
+    print("{:-^60}".format("analyze loginUserAdd function"))
     target_function = getFunction("loginUserAdd")
     if target_function:
         parms_data = get_call_parm_value(target_function.getEntryPoint())
         for call_addr in parms_data:
             call_parms = parms_data[call_addr]
             parm_data_string = ""
+            user_name = call_parms["parms"]["parm_1"]["parm_data"]
+            if isinstance(user_name, DataDB):
+                user_name = user_name.value
+            pass_hash = call_parms["parms"]["parm_2"]["parm_data"]
+            if isinstance(pass_hash, DataDB):
+                pass_hash = pass_hash.value
+            if user_name or pass_hash:
+                hard_coded_accounts[call_parms["call_addr"]] = {
+                    "user_name": user_name,
+                    "pass_hash": pass_hash
+                }
+
             for parm in sorted(call_parms['parms'].keys()):
                 parm_value = call_parms['parms'][parm]['parm_value']
                 parm_data = call_parms['parms'][parm]['parm_data']
@@ -354,16 +416,43 @@ def analyze_login_accouts():
             # remove end ', '
             parm_data_string = parm_data_string.strip(', ')
             # print("parm_data_string: {}".format(parm_data_string))
-            print("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, parm_data_string,
-                                                              call_parms['call_addr'],
-                                                              call_parms['refrence_function_name'],
-                                                              call_parms['refrence_function_addr']
-                                                              ))
+            if debug:
+                print("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, parm_data_string,
+                                                                  call_parms['call_addr'],
+                                                                  call_parms['refrence_function_name'],
+                                                                  call_parms['refrence_function_addr']
+                                                                  ))
     else:
         print("Can't find loginUserAdd function in firmware")
 
-    print('-' * 60)
+    print("Found {} hard coded accounts".format(len(hard_coded_accounts)))
+    for account in hard_coded_accounts:
+        print("user_name: {}, pass_hash: {}, added at address: {}".format(
+            hard_coded_accounts[account]['user_name'],
+            hard_coded_accounts[account]['pass_hash'],
+            hex(account)
+        ))
+
+    print('{}\r\n'.format("-" * 60))
+
+
+def analyze_service():
+    service_status = {}
+    print('{:-^60}'.format('analyze services'))
+    for service in sorted(vxworks_service_keyword.keys()):
+        service_status[service] = "Not available"
+        for service_function in vxworks_service_keyword[service]:
+            target_function = getFunction(service_function)
+            if target_function:
+                # print("Found {} in firmware, service {} might available".format(service_function, service))
+                service_status[service] = "available"
+
+    for service in sorted(service_status.items(), key=lambda x: x[1], reverse=True):
+        print('{}: {}'.format(service[0], service[1]))
+    print('{}\r\n'.format("-" * 60))
 
 
 if __name__ == '__main__':
+    analyze_bss()
     analyze_login_accouts()
+    analyze_service()
