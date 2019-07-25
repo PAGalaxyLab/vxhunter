@@ -35,6 +35,7 @@ vxworks_service_keyword = {
     "snmpd": ["snmpdInit"],
     "sshd": ["sshdInit"],
     "shell": ["shellInit"],
+    "telnetd": ["telnetdInit"],
 }
 
 
