@@ -11,6 +11,7 @@ import struct
 
 
 debug = False
+process_is_64bit = False
 
 endian = currentProgram.domainFile.getMetadata()[u'Endian']
 if endian == u'Big':
@@ -370,8 +371,11 @@ def analyze_bss():
             call_parms = parms_data[call_addr]
             # print(call_parms)
             bss_start_address = call_parms['parms']['parm_1']['parm_value']
-            bss_length = call_parms['parms']['parm_2']['parm_value']
             print("bss_start_address: {}".format(hex(bss_start_address)))
+            bss_length = call_parms['parms']['parm_2']['parm_value']
+            if not bss_length:
+                print("Can't calculate bss length.")
+                return
             print("bss_end_address: {}".format(hex(bss_start_address + bss_length - 1)))
             print("bss_length: {}".format(hex(bss_length)))
             if not is_address_in_current_program(toAddr(bss_start_address)):
