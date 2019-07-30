@@ -40,6 +40,11 @@ vxworks_service_keyword = {
 }
 
 
+decompile_function_cache = {
+
+}
+
+
 def demangle_function_name(function_name):
     sym_demangled_name = function_name
     try:
@@ -156,18 +161,16 @@ def calc_pcode_op(pcode):
         return None
 
 
-class ParmTrace(object):
+class FunctionAnalyzer(object):
 
-    def __init__(self, function, call_address, timeout=30, logger=None):
+    def __init__(self, function, timeout=30, logger=None):
         """
 
         :param function: Ghidra function object.
-        :param call_address: Ghidra Address object.
         :param timeout: timeout for decompile.
         :param logger: logger.
         """
         self.function = function
-        self.call_address = call_address
         self.timeout = timeout
         if logger is None:
             self.logger = logging.getLogger('target')
@@ -178,30 +181,34 @@ class ParmTrace(object):
             self.logger.addHandler(consolehandler)
         else:
             self.logger = logger
+        self.hfunction = None
+        self.call_pcodes = {}
+        self.prepare()
 
-    def get_hfunction(self, function):
-        """
+    def prepare(self):
+        self.hfunction = self.get_hfunction()
+        self.get_all_call_pcode()
 
-        :param function:
-        :return:
-        """
+    def get_hfunction(self):
         decomplib = DecompInterface()
         decomplib.openProgram(currentProgram)
         timeout = self.timeout
-        dRes = decomplib.decompileFunction(function, timeout, getMonitor())
+        dRes = decomplib.decompileFunction(self.function, timeout, getMonitor())
         hfunction = dRes.getHighFunction()
         return hfunction
 
-    def get_function_pcode(self, hfunction):
-        """Get pcode from hfunction.
+    def get_function_pcode(self):
+        if self.hfunction:
+            try:
+                ops = self.hfunction.getPcodeOps()
 
-        :param hfunction:
-        :return:
-        """
-        ops = hfunction.getPcodeOps()
-        return ops
+            except:
+                return None
 
-    def print_pcodes(self, ops):
+            return ops
+
+    def print_pcodes(self):
+        ops = self.get_function_pcode()
         while ops.hasNext():
             pcodeOpAST = ops.next()
             print(pcodeOpAST)
@@ -216,60 +223,89 @@ class ParmTrace(object):
                     parm = inputs[i]
                     print("parm{}: {}".format(i, parm))
 
-    def analysis_call(self, ops):
-        parms = {}
-        paths = []
+    def find_perv_call_address(self, address):
+        address_index = sorted(self.call_pcodes.keys()).index(address)
+        if address_index > 0:
+            perv_address = sorted(self.call_pcodes.keys())[address_index - 1]
+            return self.call_pcodes[perv_address]
 
+    def find_next_call_address(self, address):
+        address_index = sorted(self.call_pcodes.keys()).index(address)
+        if address_index < len(self.call_pcodes) - 1:
+            next_address = sorted(self.call_pcodes.keys())[address_index + 1]
+            return self.call_pcodes[next_address]
+
+    def get_all_call_pcode(self):
+        ops = self.get_function_pcode()
         while ops.hasNext():
             pcodeOpAST = ops.next()
             opcode = pcodeOpAST.getOpcode()
-            if opcode == PcodeOp.CALL:
-                # TODO: Need handle call_addr calc method.
-                call_addr = pcodeOpAST.getInput(0).PCAddress
-                if self.call_address == call_addr:
-                    self.logger.debug("We found target call at 0x{} in function {}(0x{})".format(
-                        pcodeOpAST.getInput(0).PCAddress, self.function.name, hex(self.function.entryPoint.offset)))
-                    target_call_addr = pcodeOpAST.getInput(0).getAddress()
-                    self.logger.debug("Calling {}(0x{}) ".format(getFunctionAt(target_call_addr), target_call_addr))
-                    inputs = pcodeOpAST.getInputs()
-                    for i in range(len(inputs))[1:]:
-                        parm = inputs[i]
-                        self.logger.debug("parm{}: {}".format(i, parm))
-                        parm_node = FlowNode(parm)
-                        parm_value = parm_node.get_value()
-                        if isinstance(parm_value, GenericAddress):
-                            parm_value = parm_value.offset
-                        parms[i] = parm_value
-                        if parm_value:
-                            self.logger.debug("parm{} value: {}".format(i, hex(parm_value)))
-                    return parms
+            if opcode in [PcodeOp.CALL, PcodeOp.CALLIND]:
+                op_call_addr = pcodeOpAST.getInput(0).PCAddress
+                self.call_pcodes[op_call_addr] = pcodeOpAST
 
-            elif opcode == PcodeOp.CALLIND:
-                self.logger.debug("In PcodeOp.CALLIND")
-                call_addr = pcodeOpAST.getInput(0).PCAddress
-                self.logger.debug("call_addr: {}".format(call_addr))
-                self.logger.debug("self.call_address.offset: {}".format(self.call_address))
-                if self.call_address == call_addr:
-                    self.logger.debug("We found target call at 0x{} in function {}(0x{})".format(
-                        pcodeOpAST.getInput(0).PCAddress, self.function.name, hex(self.function.entryPoint.offset)))
-                    # target_call_addr = pcodeOpAST.getInput(0).getAddress()
-                    target_call_addr = FlowNode(pcodeOpAST.getInput(0)).get_value()
-                    target_call_addr = toAddr(getInt(toAddr(target_call_addr)))
-                    self.logger.debug("Calling {}(0x{}) ".format(getFunctionAt(target_call_addr), target_call_addr))
-                    inputs = pcodeOpAST.getInputs()
-                    for i in range(len(inputs))[1:]:
-                        parm = inputs[i]
-                        self.logger.debug("parm{}: {}".format(i, parm))
-                        parm_node = FlowNode(parm)
-                        parm_value = parm_node.get_value()
-                        if isinstance(parm_value, GenericAddress):
-                            parm_value = parm_value.offset
-                        parms[i] = parm_value
-                        if parm_value:
-                            # print("type:{}".format(type(parm_node.get_value())))
-                            self.logger.debug("parm{} value: {}".format(i, hex(parm_value)))
-                        # self.process_varnode(parm)
-                    return parms
+    def get_call_pcode(self, call_address):
+        # TODO: Check call_address is in function.
+        if call_address in self.call_pcodes:
+            return self.call_pcodes[call_address]
+
+        return
+
+    def analyze_call_parms(self, call_address):
+        parms = {}
+        # TODO: Check call_address is in function.
+        pcodeOpAST = self.get_call_pcode(call_address)
+        if pcodeOpAST:
+            self.logger.debug("We found target call at 0x{} in function {}(0x{})".format(
+                pcodeOpAST.getInput(0).PCAddress, self.function.name, hex(self.function.entryPoint.offset)))
+            opcode = pcodeOpAST.getOpcode()
+            if opcode == PcodeOp.CALL:
+                target_call_addr = pcodeOpAST.getInput(0).getAddress()
+
+            elif opcode == PcodeOp.CALL:
+                target_call_addr = FlowNode(pcodeOpAST.getInput(0)).get_value()
+                target_call_addr = toAddr(getInt(toAddr(target_call_addr)))
+            self.logger.debug("Calling {}(0x{}) ".format(getFunctionAt(target_call_addr), target_call_addr))
+            inputs = pcodeOpAST.getInputs()
+            for i in range(len(inputs))[1:]:
+                parm = inputs[i]
+                self.logger.debug("parm{}: {}".format(i, parm))
+                parm_node = FlowNode(parm)
+                parm_value = parm_node.get_value()
+                if isinstance(parm_value, GenericAddress):
+                    parm_value = parm_value.offset
+                parms[i] = parm_value
+                if parm_value:
+                    self.logger.debug("parm{} value: {}".format(i, hex(parm_value)))
+            return parms
+        return
+
+    def get_call_parm_value(self, call_address):
+        parms_value = {}
+        if not call_address in self.call_pcodes:
+            return
+        parms = self.analyze_call_parms(call_address)
+
+        if not parms:
+            return
+
+        for i in parms:
+            self.logger.debug("parms{}: {}".format(i, parms[i]))
+            parm_value = parms[i]
+            self.logger.debug("parm_value: {}".format(parm_value))
+            parm_data = None
+            if parm_value:
+                if is_address_in_current_program(toAddr(parm_value)):
+                    if getDataAt(toAddr(parm_value)):
+                        parm_data = getDataAt(toAddr(parm_value))
+                    elif getInstructionAt(toAddr(parm_value)):
+                        parm_data = getFunctionAt(toAddr(parm_value))
+
+            parms_value["parm_{}".format(i)] = {'parm_value': parm_value,
+                                                'parm_data': parm_data
+                                                }
+
+        return parms_value
 
 
 def get_call_parm_value(call_address, search_functions=None):
@@ -281,7 +317,6 @@ def get_call_parm_value(call_address, search_functions=None):
     """
     target_function = getFunctionAt(call_address)
     parms_data = {}
-    cache_data = {}
     if target_function:
         target_references = getReferencesTo(target_function.getEntryPoint())
         for target_reference in target_references:
@@ -307,56 +342,26 @@ def get_call_parm_value(call_address, search_functions=None):
                 if function.name not in search_functions:
                     continue
 
-            target = ParmTrace(function=function, call_address=call_addr)
-            function_address = function.getEntryPoint().offset
-            if function_address in cache_data:
-                hfunction = cache_data[function_address]['hfunction']
+            function_address = function.getEntryPoint()
+            if function_address in decompile_function_cache:
+                target = decompile_function_cache[function_address]
             else:
-                hfunction = target.get_hfunction(function)
-                if not hfunction:
-                    # print("Can't get hfunction")
-                    continue
-                else:
-                    cache_data[function_address] = {'hfunction': hfunction}
+                target = FunctionAnalyzer(function=function)
+                decompile_function_cache[function_address] = target
 
-            ops = target.get_function_pcode(hfunction)
-            # print("-" * 30)
-            parms = target.analysis_call(ops)
-            demangled_function_name = demangle_function_name(function.name)
-            if function.name == demangle_function_name(function.name):
-                refrence_function_name = function.name
-            else:
-                refrence_function_name = "{}({})".format(demangled_function_name, function.name)
-
-            parms_data[call_addr.offset] = {
-                'call_addr': call_addr.offset,
+            parms_data[call_addr] = {
+                'call_addr': call_addr,
                 'refrence_function_addr': function.getEntryPoint().offset,
-                'refrence_function_name': refrence_function_name,
+                'refrence_function_name': function.name,
                 'parms': {}
             }
-            trace_data = parms_data[call_addr.offset]
-            # print(trace_data)
 
-            if not parms:
+            parms_value = target.get_call_parm_value(call_address=call_addr)
+            if not parms_value:
                 continue
 
-            for i in parms:
-                # print("parms{}: {}".format(i, parms[i]))
-                parm_value = parms[i]
-                # print("parm_value: {}".format(parm_value))
-                parm_data = None
-                if parm_value:
-                    # print("IN")
-                    if is_address_in_current_program(toAddr(parm_value)):
-                        # print("IN2")
-                        if getDataAt(toAddr(parm_value)):
-                            parm_data = getDataAt(toAddr(parm_value))
-                        elif getInstructionAt(toAddr(parm_value)):
-                            parm_data = getFunctionAt(toAddr(parm_value))
-
-                trace_data['parms']["parm_{}".format(i)] = {'parm_value': parm_value,
-                                                            'parm_data': parm_data
-                                                            }
+            trace_data = parms_data[call_addr]
+            trace_data['parms'] = parms_value
 
         return parms_data
 
@@ -435,7 +440,7 @@ def analyze_login_accouts():
         print("user_name: {}, pass_hash: {}, added at address: {}".format(
             hard_coded_accounts[account]['user_name'],
             hard_coded_accounts[account]['pass_hash'],
-            hex(account)
+            hex(account.offset)
         ))
 
     print('{}\r\n'.format("-" * 60))
