@@ -13,6 +13,17 @@ import struct
 debug = False
 process_is_64bit = False
 
+# Init Default Logger
+logger = logging.getLogger('Default_logger')
+logger.setLevel(logging.INFO)
+consolehandler = logging.StreamHandler()
+console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
+consolehandler.setFormatter(console_format)
+logger.addHandler(consolehandler)
+
+if debug:
+    logger.setLevel(logging.DEBUG)
+
 endian = currentProgram.domainFile.getMetadata()[u'Endian']
 if endian == u'Big':
     is_big_endian = True
@@ -90,12 +101,21 @@ def get_signed_value(data):
 
 
 class FlowNode(object):
-    def __init__(self, var_node):
+    def __init__(self, var_node, logger=logger):
         """ Used to get VarNode value
 
         :param var_node:
         """
         self.var_node = var_node
+        if logger is None:
+            self.logger = logging.getLogger('FlowNode_logger')
+            self.logger.setLevel(logging.INFO)
+            consolehandler = logging.StreamHandler()
+            console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
+            consolehandler.setFormatter(console_format)
+            self.logger.addHandler(consolehandler)
+        else:
+            self.logger = logger
 
     def get_value(self):
         """ Get VarNode value depend on it's type.
@@ -103,67 +123,110 @@ class FlowNode(object):
         :return:
         """
         if self.var_node.isAddress():
+            self.logger.debug("Var_node isAddress")
             return self.var_node.getAddress()
         elif self.var_node.isConstant():
+            self.logger.debug("Var_node isConstant")
             return self.var_node.getAddress()
         elif self.var_node.isUnique():
+            self.logger.debug("Var_node isUnique")
             return calc_pcode_op(self.var_node.getDef())
         elif self.var_node.isRegister():
+            self.logger.debug("Var_node isRegister")
             return calc_pcode_op(self.var_node.getDef())
+        elif self.var_node.isPersistant():
+            self.logger.debug("Var_node isPersistant")
+            # TODO: Handler this later
+            return
+        elif self.var_node.isAddrTied():
+            self.logger.debug("Var_node isAddrTied")
+            return calc_pcode_op(self.var_node.getDef())
+        elif self.var_node.isUnaffected():
+            self.logger.debug("Var_node isUnaffected")
+            # TODO: Handler this later
+            return
+        else:
+            self.logger.debug("self.var_node: {}".format(self.var_node))
 
 
 def calc_pcode_op(pcode):
-    # print("pcode: {}, type: {}".format(pcode, type(pcode)))
+    logger.debug("pcode: {}, type: {}".format(pcode, type(pcode)))
     if isinstance(pcode, PcodeOpAST):
         opcode = pcode.getOpcode()
         if opcode == PcodeOp.PTRSUB:
+            logger.debug("PTRSUB")
             var_node_1 = FlowNode(pcode.getInput(0))
             var_node_2 = FlowNode(pcode.getInput(1))
             value_1 = var_node_1.get_value()
             value_2 = var_node_2.get_value()
             if isinstance(value_1, GenericAddress) and isinstance(value_2, GenericAddress):
                 return value_1.offset + value_2.offset
+
             else:
                 return None
 
         elif opcode == PcodeOp.CAST:
+            logger.debug("CAST")
             var_node_1 = FlowNode(pcode.getInput(0))
             value_1 = var_node_1.get_value()
             if isinstance(value_1, GenericAddress):
                 return value_1.offset
+
             else:
                 return None
 
         elif opcode == PcodeOp.PTRADD:
+            logger.debug("PTRADD")
+            # TODO: Handle input2
             var_node_0 = FlowNode(pcode.getInput(0))
             var_node_1 = FlowNode(pcode.getInput(1))
             var_node_2 = FlowNode(pcode.getInput(2))
             try:
                 value_0_point = var_node_0.get_value()
+                logger.debug("value_0_point: {}".format(value_0_point))
                 value_0 = toAddr(getInt(value_0_point))
+                logger.debug("value_0: {}".format(value_0))
+                logger.debug("type(value_0): {}".format(type(value_0)))
                 value_1 = var_node_1.get_value()
-                value_2 = var_node_2.get_value()
+                logger.debug("value_1: {}".format(value_1))
+                logger.debug("type(value_1): {}".format(type(value_1)))
                 value_1 = get_signed_value(value_1.offset)
-                # print("value_0: {}".format(value_0))
-                # print("type(value_0): {}".format(type(value_0)))
-                # print("value_1: {}".format(value_1))
-                # print("type(value_1): {}".format(type(value_1)))
-                # print("value_2: {}".format(value_2))
-                # print("type(value_2): {}".format(type(value_2)))
-                rsp = value_0.add(value_1)
-                # print("rsp: {}".format(rsp))
-                return rsp.offset
+                value_2 = var_node_2.get_value()
+                logger.debug("value_2: {}".format(value_2))
+                logger.debug("type(value_2): {}".format(type(value_2)))
+                output_value = value_0.add(value_1)
+                logger.debug("output_value: {}".format(output_value))
+                return output_value.offset
             except:
-                # print("Got something wrong with calc PcodeOp.PTRADD ")
+                logger.debug("Got something wrong with calc PcodeOp.PTRADD ")
                 return None
 
+        elif opcode == PcodeOp.INDIRECT:
+            logger.debug("INDIRECT")
+            # TODO: Need find a way to handle INDIRECT operator.
+            return None
+
+        elif opcode == PcodeOp.MULTIEQUAL:
+            logger.debug("MULTIEQUAL")
+            # TODO: Add later
+            return None
+
+        elif opcode == PcodeOp.COPY:
+            logger.debug("COPY")
+            logger.debug("input_0: {}".format(pcode.getInput(0)))
+            logger.debug("Output: {}".format(pcode.getOutput()))
+            var_node_0 = FlowNode(pcode.getInput(0))
+            value_0 = var_node_0.get_value()
+            return value_0
+
     else:
+        logger.debug("Found Unhandled opcode: {}".format(pcode))
         return None
 
 
 class FunctionAnalyzer(object):
 
-    def __init__(self, function, timeout=30, logger=None):
+    def __init__(self, function, timeout=30, logger=logger):
         """
 
         :param function: Ghidra function object.
@@ -224,13 +287,23 @@ class FunctionAnalyzer(object):
                     print("parm{}: {}".format(i, parm))
 
     def find_perv_call_address(self, address):
-        address_index = sorted(self.call_pcodes.keys()).index(address)
+        try:
+            address_index = sorted(self.call_pcodes.keys()).index(address)
+
+        except Exception as err:
+            return
+
         if address_index > 0:
             perv_address = sorted(self.call_pcodes.keys())[address_index - 1]
             return self.call_pcodes[perv_address]
 
     def find_next_call_address(self, address):
-        address_index = sorted(self.call_pcodes.keys()).index(address)
+        try:
+            address_index = sorted(self.call_pcodes.keys()).index(address)
+
+        except Exception as err:
+            return
+
         if address_index < len(self.call_pcodes) - 1:
             next_address = sorted(self.call_pcodes.keys())[address_index + 1]
             return self.call_pcodes[next_address]
@@ -262,9 +335,9 @@ class FunctionAnalyzer(object):
             if opcode == PcodeOp.CALL:
                 target_call_addr = pcodeOpAST.getInput(0).getAddress()
 
-            elif opcode == PcodeOp.CALL:
+            elif opcode == PcodeOp.CALLIND:
                 target_call_addr = FlowNode(pcodeOpAST.getInput(0)).get_value()
-                target_call_addr = toAddr(getInt(toAddr(target_call_addr)))
+                self.logger.debug("target_call_addr: {}".format(target_call_addr))
             self.logger.debug("Calling {}(0x{}) ".format(getFunctionAt(target_call_addr), target_call_addr))
             inputs = pcodeOpAST.getInputs()
             for i in range(len(inputs))[1:]:
@@ -308,7 +381,7 @@ class FunctionAnalyzer(object):
         return parms_value
 
 
-def get_call_parm_value(call_address, search_functions=None):
+def dump_call_parm_value(call_address, search_functions=None):
     """
 
     :param call_address:
@@ -351,7 +424,7 @@ def get_call_parm_value(call_address, search_functions=None):
 
             parms_data[call_addr] = {
                 'call_addr': call_addr,
-                'refrence_function_addr': function.getEntryPoint().offset,
+                'refrence_function_addr': function.getEntryPoint(),
                 'refrence_function_name': function.name,
                 'parms': {}
             }
@@ -370,7 +443,7 @@ def analyze_bss():
     print('{:-^60}'.format('analyze bss info'))
     target_function = getFunction("bzero")
     if target_function:
-        parms_data = get_call_parm_value(call_address=target_function.getEntryPoint(), search_functions=['sysStart',
+        parms_data = dump_call_parm_value(call_address=target_function.getEntryPoint(), search_functions=['sysStart',
                                                                                                          'usrInit'])
         for call_addr in parms_data:
             call_parms = parms_data[call_addr]
@@ -399,7 +472,7 @@ def analyze_login_accouts():
     print("{:-^60}".format("analyze loginUserAdd function"))
     target_function = getFunction("loginUserAdd")
     if target_function:
-        parms_data = get_call_parm_value(target_function.getEntryPoint())
+        parms_data = dump_call_parm_value(target_function.getEntryPoint())
         for call_addr in parms_data:
             call_parms = parms_data[call_addr]
             parm_data_string = ""
