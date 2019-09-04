@@ -82,7 +82,7 @@ def is_address_in_current_program(address):
     return False
 
 
-def get_signed_value(data):
+def get_signed_value(input_data):
     pack_format = ""
     if is_big_endian:
         pack_format += ">"
@@ -94,7 +94,8 @@ def get_signed_value(data):
     else:
         pack_format += "I"
 
-    data = struct.pack(pack_format.upper(), data.offset)
+    logger.debug("type(input_data): {}".format(type(input_data)))
+    data = struct.pack(pack_format.upper(), input_data)
     signed_data = struct.unpack(pack_format.lower(), data)[0]
 
     return signed_data
@@ -192,6 +193,7 @@ def calc_pcode_op(pcode):
                 logger.debug("value_1: {}".format(value_1))
                 logger.debug("type(value_1): {}".format(type(value_1)))
                 if not isinstance(value_1, GenericAddress):
+                    logger.debug("value_1 is not GenericAddress!")
                     return
                 value_1 = get_signed_value(value_1.offset)
                 # TODO: Handle input2 later
