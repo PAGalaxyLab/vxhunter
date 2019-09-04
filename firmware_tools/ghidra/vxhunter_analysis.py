@@ -56,25 +56,6 @@ decompile_function_cache = {
 }
 
 
-def demangle_function_name(function_name):
-    sym_demangled_name = function_name
-    try:
-        sym_demangled = demangler.demangle(function_name, True)
-
-        if not sym_demangled:
-            # some mangled function name didn't start with mangled prefix
-            sym_demangled = demangler.demangle(function_name, False)
-
-        if sym_demangled:
-            sym_demangled_name = sym_demangled.getSignature(False)
-
-    except DemangledException as err:
-        # print("Got DemangledException: {}".format(err))
-        return sym_demangled_name
-
-    return sym_demangled_name
-
-
 def is_address_in_current_program(address):
     for block in currentProgram.memory.blocks:
         if address.offset in range(block.getStart().offset,block.getEnd().offset):
