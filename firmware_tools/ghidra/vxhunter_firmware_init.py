@@ -93,11 +93,14 @@ try:
                                 # some mangled function name didn't start with mangled prefix
                                 sym_demangled = demangler.demangle(symbol_name_string, False)
 
+                            if not sym_demangled:
+                                # Temp fix to handle _ prefix function name by remove _ prefix before demangle
+                                sym_demangled = demangler.demangle(symbol_name_string[1:], False)
+
                             if sym_demangled:
                                 sym_demangled_name = sym_demangled.getSignature(False)
 
                         except DemangledException as err:
-                            # print("Got DemangledException: {}".format(err))
                             sym_demangled_name = None
 
                         if sym_demangled_name:
@@ -130,6 +133,9 @@ try:
 
                 except Exception as err:
                     print("Create function Failed: %s" % err)
+
+                except:
+                    print("Create function Failed: Java error")
 
                 print("keep going!")
                 ea = ea.add(symbol_interval)

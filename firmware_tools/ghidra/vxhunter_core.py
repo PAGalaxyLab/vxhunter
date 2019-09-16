@@ -72,6 +72,7 @@ class VxTarget(object):
             self.logger.addHandler(consolehandler)
         else:
             self.logger = logger
+        self.prepare()
 
     def prepare(self):
         """ Trying to find symbol from image.
@@ -229,11 +230,13 @@ class VxTarget(object):
                 'symbol_dest_addr': symbol_dest_addr,
                 'offset': i
             })
-        self.logger.debug("self._symbol_table: %s" % self._symbol_table)
+        # self.logger.debug("self._symbol_table: %s" % self._symbol_table)
+        self.logger.debug("len(self._symbol_table): %s".format(len(self._symbol_table)))
         self._symbol_table = sorted(self._symbol_table, key=lambda x: x['symbol_name_addr'])
         for i in range(len(self._symbol_table) - 1):
             self._symbol_table[i]['symbol_name_length'] = self._symbol_table[i + 1]['symbol_name_addr'] - \
                                                         self._symbol_table[i]['symbol_name_addr']
+        self.logger.debug("len(self._symbol_table): %s".format(len(self._symbol_table)))
         return True
 
     @staticmethod
@@ -251,9 +254,10 @@ class VxTarget(object):
         :param string: string to check.
         :return: True if string is match function name format, False otherwise.
         """
-        bad_str = ['\\', '%', '+', ',', '&', '/']
-        # function name length should less than 255 byte
-        if len(string) > 255:
+        #
+        bad_str = ['\\', '%', '+', ',', '&', '/', ')', '(', '[', ']']
+        # function name length should less than 512 byte
+        if len(string) > 512:
             return False
 
         for data in bad_str:
@@ -437,22 +441,38 @@ class VxTarget(object):
         :param str_index:
         :return:
         """
+        fault_count = 0
+
         if len(self._symbol_table) < default_check_count:
             count = len(self._symbol_table)
         else:
             count = default_check_count
         for i in range(count):
+            self.logger.debug("str_index: {}".format(str_index))
+            self.logger.debug("self._string_table[str_index]: {}".format(self._string_table[str_index]))
+            self.logger.debug("func_index: {}".format(func_index))
+            self.logger.debug("self._symbol_table[func_index]: {}".format(self._symbol_table[func_index]))
+
             if (func_index >= len(self._symbol_table)) or (str_index >= len(self._string_table)):
                 self.logger.debug("_check_fix False")
                 return False
             if i == count - 1:
-                self.logger.debug("_check_fix True")
-                return True
+                if fault_count < 10:
+                    self.logger.debug("_check_fix True")
+                    return True
+                else:
+                    self.logger.debug("_check_fix False too many fault")
+                    return False
+
             if self._string_table[str_index]['length'] == self._symbol_table[func_index]['symbol_name_length']:
                 func_index += 1
                 str_index += 1
                 self.logger.debug("_check_fix continue")
-                continue
+
+            elif self._symbol_table[func_index]['symbol_name_length'] < self._string_table[str_index]['length']:
+                # Sometime Symbol name might point to mid of string.
+                fault_count += 1
+                func_index += 1
             else:
                 self.logger.debug("_check_fix False2")
                 return False
@@ -462,23 +482,27 @@ class VxTarget(object):
 
         :return: Load address if found, None otherwise.
         """
-        self.prepare()
         if self._has_symbol is False:
             return None
 
         for key_word in function_name_key_words:
+            prefix_keyword = '\x00' + key_word + '\x00'
             key_word = '\x00' + key_word + '\x00'
-            if key_word in self._firmware is False:
+            if key_word in self._firmware is False and prefix_keyword in self._firmware is False:
                 self.logger.info("This firmware didn't contain function name")
                 return None
+        try:
+            key_function_index = self._firmware.index('\x00' + function_name_key_words[0] + '\x00')
+        except Exception as err:
+            # Handler _ prefix symbols
+            key_function_index = self._firmware.index('\x00_' + function_name_key_words[0] + '\x00')
 
-        key_function_index = self._firmware.index('\x00' + function_name_key_words[0] + '\x00')
         str_start_address, str_end_address = self.find_string_table_by_key_function_index(key_function_index)
         self.get_string_table(str_start_address, str_end_address)
         # TODO: Need improve performance
         self.logger.info("Start analyse")
-        for func_index in range(len(self._symbol_table)):
-            for str_index in range(len(self._string_table)):
+        for str_index in range(len(self._string_table)):
+            for func_index in range(len(self._symbol_table)):
                 self.logger.debug(
                     "self._string_table[str_index]['length']: %s" % self._string_table[str_index]['length'])
                 self.logger.debug(
@@ -526,7 +550,6 @@ class VxTarget(object):
 
         :return: Load address if match known address, None otherwise.
         """
-        self.prepare()
         if self._has_symbol is False:
             return None
         self.logger.debug("has_symbol: %s" % self._has_symbol)
