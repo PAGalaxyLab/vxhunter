@@ -486,7 +486,7 @@ class VxTarget(object):
             return None
 
         for key_word in function_name_key_words:
-            prefix_keyword = '\x00' + key_word + '\x00'
+            prefix_keyword = '\x00_' + key_word + '\x00'
             key_word = '\x00' + key_word + '\x00'
             if key_word in self._firmware is False and prefix_keyword in self._firmware is False:
                 self.logger.info("This firmware didn't contain function name")
