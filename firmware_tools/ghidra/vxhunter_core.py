@@ -42,14 +42,14 @@ need_create_function = [
 
 
 class VxTarget(object):
-    def __init__(self, firmware, vx_version=5, endian=None, logger=None):
+    def __init__(self, firmware, vx_version=5, big_endian=False, logger=None):
         """
         :param firmware: data of firmware
         :param vx_version: 5 = VxWorks 5.x; 6= VxWorks 6.x
-        :param endian: 1 = big endian; 2 = little endian
+        :param big_endian: True = big endian; False = little endian
         :param logger: logger for the target (default: None)
         """
-        self._endian = endian
+        self.big_endian = big_endian
         self._vx_version = vx_version
         self.symbol_table_start = None
         self.symbol_table_end = None
@@ -94,14 +94,14 @@ class VxTarget(object):
         data2 = self._firmware[self.symbol_table_start + 4 + self._symbol_interval:self.symbol_table_start +
                                                                                    4 + self._symbol_interval * 2]
         if data1[0:2] == data2[0:2]:
-            self.logger.info("VxWorks endian: Big endian(1)")
-            self._endian = 1
+            self.logger.info("VxWorks endian: Big endian")
+            self.big_endian = True
         elif data1[2:4] == data2[2:4]:
-            self.logger.info("VxWorks endian: Little endian(2)")
-            self._endian = 2
+            self.logger.info("VxWorks endian: Little endian")
+            self.big_endian = False
         else:
-            self.logger.info("VxWorks endian: Little endian(2)")
-            self._endian = 2
+            self.logger.info("VxWorks endian: Little endian")
+            self.big_endian = False
 
     def _check_symbol_format(self, offset):
         """ Check offset is symbol table.
@@ -216,9 +216,9 @@ class VxTarget(object):
         for i in range(self.symbol_table_start, self.symbol_table_end, self._symbol_interval):
             symbol_name_addr = self._firmware[i + 4:i + 8]
             symbol_dest_addr = self._firmware[i + 8:i + 12]
-            if self._endian == 1:
+            if self.big_endian:
                 unpack_format = '>I'
-            elif self._endian == 2:
+            else:
                 unpack_format = '<I'
             symbol_name_addr = int(struct.unpack(unpack_format, symbol_name_addr)[0])
             self.logger.debug("symbol_name_addr: %s" % symbol_name_addr)
@@ -565,7 +565,7 @@ class VxTarget(object):
 
         :return:
         """
-        self._endian = None
+        self.big_endian = False
         self.symbol_table_start = None
         self.symbol_table_end = None
         self._string_table = []
