@@ -701,9 +701,14 @@ if __name__ == '__main__':
     print("\n###### Rebase current firmware ######")
     # close all open files
     r2p.cmd("o--")
+    # backup current asm bits
+    current_asm_bits = r2p.cmd("e asm.bits")
     # map image to correct load address
     r2_command = "o {} {} r-x".format(firmware_path, hex(image_load_address))
     print("Rebase with r2 command: {}".format(r2_command))
+    r2p.cmd(r2_command)
+    # recover asm bits setup
+    r2_command = "e asm.bits={}".format(current_asm_bits)
     r2p.cmd(r2_command)
 
     ####################
