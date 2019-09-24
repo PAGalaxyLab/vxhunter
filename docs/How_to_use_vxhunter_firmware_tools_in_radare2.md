@@ -1,6 +1,6 @@
 # How to use VxHunter firmware tools in radare2
 
-VxHunter Ghidra script can analyze Vxworks image load address and symbols automatically.
+VxHunter radare2 script can analyze Vxworks image load address and symbols automatically.
 
 
 ## Step 1: Open VxWorks image with radare2
@@ -49,7 +49,7 @@ firmware_path: /path/image_vx5_ppc_big_endian.bin
 [INFO    ][vxhunter_r2_py3.find_symbol_table] symbol table end offset: 0x3293b0
 ```
 
-VxHunter will analyze Vxworks image load address and symbols, if succeed you will get some output like this:
+VxHunter will analyze VxWorks image load address and symbols, if succeed you will get some output like this:
 
 ```
 ###### Start analyze firmware ######
