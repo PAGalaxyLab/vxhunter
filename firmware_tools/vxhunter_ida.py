@@ -26,6 +26,18 @@ symbol_format_sign_6 = [
     '\x00\x00\x00\x00\x00\x00\x11\x00'
 ]
 
+sym_flags = [
+    0,      # Undefined Symbol
+    2,      # Local Absolute
+    3,      # Global Absolute
+    4,      # Local .text
+    5,      # Global .text
+    6,      # Local Data
+    7,      # Global Data
+    8,      # Local BSS
+    9,      # Global BSS
+]
+
 need_create_function = [
     0x0500,
     0x050000
@@ -33,14 +45,14 @@ need_create_function = [
 
 
 class VxTarget(object):
-    def __init__(self, firmware, vx_version=5, endian=None, logger=None):
+    def __init__(self, firmware, vx_version=5, big_endian=False, logger=None):
         """
         :param firmware: data of firmware
         :param vx_version: 5 = VxWorks 5.x; 6= VxWorks 6.x
-        :param endian: 1 = big endian; 2 = little endian
+        :param big_endian: True = big endian; False = little endian
         :param logger: logger for the target (default: None)
         """
-        self._endian = endian
+        self.big_endian = big_endian
         self._vx_version = vx_version
         self.symbol_table_start = None
         self.symbol_table_end = None
@@ -53,6 +65,7 @@ class VxTarget(object):
             self._symbol_interval = 16
         elif self._vx_version == 6:
             self._symbol_interval = 20
+
         if logger is None:
             self.logger = logging.getLogger('target')
             self.logger.setLevel(logging.INFO)
@@ -62,6 +75,7 @@ class VxTarget(object):
             self.logger.addHandler(consolehandler)
         else:
             self.logger = logger
+        self.prepare()
 
     def prepare(self):
         """ Trying to find symbol from image.
@@ -83,14 +97,14 @@ class VxTarget(object):
         data2 = self._firmware[self.symbol_table_start + 4 + self._symbol_interval:self.symbol_table_start +
                                                                                    4 + self._symbol_interval * 2]
         if data1[0:2] == data2[0:2]:
-            self.logger.info("VxWorks endian: Big endian(1)")
-            self._endian = 1
+            self.logger.info("VxWorks endian: Big endian")
+            self.big_endian = True
         elif data1[2:4] == data2[2:4]:
-            self.logger.info("VxWorks endian: Little endian(2)")
-            self._endian = 2
+            self.logger.info("VxWorks endian: Little endian")
+            self.big_endian = False
         else:
-            self.logger.info("VxWorks endian: Little endian(2)")
-            self._endian = 2
+            self.logger.info("VxWorks endian: Little endian")
+            self.big_endian = False
 
     def _check_symbol_format(self, offset):
         """ Check offset is symbol table.
@@ -205,9 +219,9 @@ class VxTarget(object):
         for i in range(self.symbol_table_start, self.symbol_table_end, self._symbol_interval):
             symbol_name_addr = self._firmware[i + 4:i + 8]
             symbol_dest_addr = self._firmware[i + 8:i + 12]
-            if self._endian == 1:
+            if self.big_endian:
                 unpack_format = '>I'
-            elif self._endian == 2:
+            else:
                 unpack_format = '<I'
             symbol_name_addr = int(struct.unpack(unpack_format, symbol_name_addr)[0])
             self.logger.debug("symbol_name_addr: %s" % symbol_name_addr)
@@ -219,11 +233,13 @@ class VxTarget(object):
                 'symbol_dest_addr': symbol_dest_addr,
                 'offset': i
             })
-        self.logger.debug("self._symbol_table: %s" % self._symbol_table)
+        # self.logger.debug("self._symbol_table: %s" % self._symbol_table)
+        self.logger.debug("len(self._symbol_table): %s".format(len(self._symbol_table)))
         self._symbol_table = sorted(self._symbol_table, key=lambda x: x['symbol_name_addr'])
         for i in range(len(self._symbol_table) - 1):
             self._symbol_table[i]['symbol_name_length'] = self._symbol_table[i + 1]['symbol_name_addr'] - \
                                                         self._symbol_table[i]['symbol_name_addr']
+        self.logger.debug("len(self._symbol_table): %s".format(len(self._symbol_table)))
         return True
 
     @staticmethod
@@ -241,9 +257,10 @@ class VxTarget(object):
         :param string: string to check.
         :return: True if string is match function name format, False otherwise.
         """
-        bad_str = ['\\', '%', '+', ',', '&', '/']
-        # function name length should less than 255 byte
-        if len(string) > 255:
+        #
+        bad_str = ['\\', '%', '+', ',', '&', '/', ')', '(', '[', ']']
+        # function name length should less than 512 byte
+        if len(string) > 512:
             return False
 
         for data in bad_str:
@@ -427,22 +444,38 @@ class VxTarget(object):
         :param str_index:
         :return:
         """
+        fault_count = 0
+
         if len(self._symbol_table) < default_check_count:
             count = len(self._symbol_table)
         else:
             count = default_check_count
         for i in range(count):
+            self.logger.debug("str_index: {}".format(str_index))
+            self.logger.debug("self._string_table[str_index]: {}".format(self._string_table[str_index]))
+            self.logger.debug("func_index: {}".format(func_index))
+            self.logger.debug("self._symbol_table[func_index]: {}".format(self._symbol_table[func_index]))
+
             if (func_index >= len(self._symbol_table)) or (str_index >= len(self._string_table)):
                 self.logger.debug("_check_fix False")
                 return False
             if i == count - 1:
-                self.logger.debug("_check_fix True")
-                return True
+                if fault_count < 10:
+                    self.logger.debug("_check_fix True")
+                    return True
+                else:
+                    self.logger.debug("_check_fix False too many fault")
+                    return False
+
             if self._string_table[str_index]['length'] == self._symbol_table[func_index]['symbol_name_length']:
                 func_index += 1
                 str_index += 1
                 self.logger.debug("_check_fix continue")
-                continue
+
+            elif self._symbol_table[func_index]['symbol_name_length'] < self._string_table[str_index]['length']:
+                # Sometime Symbol name might point to mid of string.
+                fault_count += 1
+                func_index += 1
             else:
                 self.logger.debug("_check_fix False2")
                 return False
@@ -452,23 +485,27 @@ class VxTarget(object):
 
         :return: Load address if found, None otherwise.
         """
-        self.prepare()
         if self._has_symbol is False:
             return None
 
         for key_word in function_name_key_words:
+            prefix_keyword = '\x00_' + key_word + '\x00'
             key_word = '\x00' + key_word + '\x00'
-            if key_word in self._firmware is False:
+            if key_word in self._firmware is False and prefix_keyword in self._firmware is False:
                 self.logger.info("This firmware didn't contain function name")
                 return None
+        try:
+            key_function_index = self._firmware.index('\x00' + function_name_key_words[0] + '\x00')
+        except Exception as err:
+            # Handler _ prefix symbols
+            key_function_index = self._firmware.index('\x00_' + function_name_key_words[0] + '\x00')
 
-        key_function_index = self._firmware.index('\x00' + function_name_key_words[0] + '\x00')
         str_start_address, str_end_address = self.find_string_table_by_key_function_index(key_function_index)
         self.get_string_table(str_start_address, str_end_address)
         # TODO: Need improve performance
         self.logger.info("Start analyse")
-        for func_index in range(len(self._symbol_table)):
-            for str_index in range(len(self._string_table)):
+        for str_index in range(len(self._string_table)):
+            for func_index in range(len(self._symbol_table)):
                 self.logger.debug(
                     "self._string_table[str_index]['length']: %s" % self._string_table[str_index]['length'])
                 self.logger.debug(
@@ -516,7 +553,6 @@ class VxTarget(object):
 
         :return: Load address if match known address, None otherwise.
         """
-        self.prepare()
         if self._has_symbol is False:
             return None
         self.logger.debug("has_symbol: %s" % self._has_symbol)
@@ -532,13 +568,53 @@ class VxTarget(object):
 
         :return:
         """
-        self._endian = None
+        self.big_endian = False
         self.symbol_table_start = None
         self.symbol_table_end = None
         self._string_table = []
         self._symbol_table = []
         self.load_address = None
         self._has_symbol = None
+
+
+def demangle_function(demangle_string):
+    function_return = None
+    function_parameters = None
+    function_name_end = len(demangle_string)
+
+    # get parameters
+    index = len(demangle_string) - 1
+    if demangle_string[-1] == ')':
+        # have parameters
+        parentheses_count = 0
+        while index >= 0:
+            if demangle_string[index] == ')':
+                parentheses_count += 1
+
+            elif demangle_string[index] == '(':
+                parentheses_count -= 1
+
+            index -= 1
+
+            if parentheses_count == 0:
+                break
+
+        function_parameters = demangle_string[index + 2:-1]
+        function_name_end = index
+
+    # get function name
+    while index >= 0:
+        if demangle_string[index] == ' ':
+            break
+        else:
+            index -= 1
+    function_name_start = index
+    function_name = demangle_string[function_name_start + 1:function_name_end + 1]
+
+    # get function return
+    function_return = demangle_string[:function_name_start]
+    return function_return, function_name, function_parameters
+
 
 
 # --------------------------------------------------------------------------
