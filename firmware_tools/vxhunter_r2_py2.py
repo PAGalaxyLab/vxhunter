@@ -11,31 +11,42 @@ known_address = [0x80002000, 0x10000, 0x1000, 0xf2003fe4, 0x100000, 0x107fe0]
 
 function_name_key_words = ['bzero', 'usrInit', 'bfill']
 
-symbol_format_sign_5 = [
-    '\x00\x00\x05\x00',  # Function
-    '\x00\x00\x07\x00',  # Variable
-    '\x00\x00\x09\x00',  # Variable
-    '\x00\x00\x11\x00'   #
+# VxWorks 5.5
+vx_5_sym_types = [
+    # 0x00,      # Undefined Symbol
+    # 0x01,      # Global (external)
+    # 0x02,      # Local Absolute
+    # 0x03,      # Global Absolute
+    0x04,      # Local .text
+    0x05,      # Global .text
+    0x06,      # Local Data
+    0x07,      # Global Data
+    0x08,      # Local BSS
+    0x09,      # Global BSS
+    0x12,      # Local Common symbol
+    0x13,      # Global Common symbol
+    0x40,      # Local Symbols related to a PowerPC SDA section
+    0x41,      # Global Symbols related to a PowerPC SDA section
+    0x80,      # Local symbols related to a PowerPC SDA2 section
+    0x81,      # Local symbols related to a PowerPC SDA2 section
 ]
 
-symbol_format_sign_6 = [
-    '\x00\x00\x00\x00\x00\x00\x03\x00',  # Unknown Type (Might not function name)
-    '\x00\x00\x00\x00\x00\x00\x05\x00',  # Function
-    '\x00\x00\x00\x00\x00\x00\x07\x00',  # Variable
-    '\x00\x00\x00\x00\x00\x00\x09\x00',  # Variable
-    '\x00\x00\x00\x00\x00\x00\x11\x00'
-]
-
-sym_flags = [
-    0,      # Undefined Symbol
-    2,      # Local Absolute
-    3,      # Global Absolute
-    4,      # Local .text
-    5,      # Global .text
-    6,      # Local Data
-    7,      # Global Data
-    8,      # Local BSS
-    9,      # Global BSS
+# VxWorks 6.8
+vx_6_sym_types = [
+    # 0x00,  # Undefined Symbol
+    # 0x01,  # Global (external)
+    # 0x02,  # Local Absolute
+    # 0x03,  # Global Absolute
+    0x04,  # Local .text
+    0x05,  # Global .text
+    0x08,  # Local Data
+    0x09,  # Global Data
+    0x10,  # Local BSS
+    0x11,  # Global BSS
+    0x20,  # Local Common symbol
+    0x21,  # Global Common symbol
+    0x40,  # Local Symbols
+    0x41,  # Global Symbols
 ]
 
 need_create_function = [
@@ -112,11 +123,11 @@ class VxTarget(object):
         :param offset: offset from image.
         :return: True if offset is symbol table, False otherwise.
         """
-        check_data = self._firmware[offset:offset + self._symbol_interval * 10]
+        check_data = self._firmware[offset:offset + self._symbol_interval * default_check_count]
         is_big_endian = True
         is_little_endian = True
-        # check symbol data match sign
-        for i in range(10):
+        # check symbol data match struct
+        for i in range(default_check_count):
             check_data_1 = check_data[i * self._symbol_interval:(i + 1) * self._symbol_interval]
             if self._check_symbol_format_simple(check_data_1) is False:
                 return False
@@ -152,29 +163,52 @@ class VxTarget(object):
         :return: True if data is symbol, False otherwise.
         """
         if self._vx_version == 5:
-            if data[:4] != '\x00\x00\x00\x00':
+            # Check symbol type is valid
+            sym_type = ord(data[14])
+            if sym_type not in vx_5_sym_types:
                 return False
+
+            # symbol should end with '\x00'
+            if data[15] != '\x00':
+                return False
+
+            # Check symbol group is '\x00\x00'
+            if data[12:14] != '\x00\x00':
+                return False
+
+            # symbol_name point should not be zero
             if data[4:8] == '\x00\x00\x00\x00':
                 return False
+
+            # symbol value point should not be zero
             if data[8:12] == '\x00\x00\x00\x00':
                 return False
-            for sign in symbol_format_sign_5:
-                if data[-4:] == sign:
-                    return True
-            return False
+
+            return True
 
         elif self._vx_version == 6:
-            if data[:4] != '\x00\x00\x00\x00':
+            # Check symbol type is valid
+            sym_type = ord(data[18])
+            if sym_type not in vx_6_sym_types:
                 return False
+
+            # symbol should end with '\x00'
+            if data[19] != '\x00':
+                return False
+
+            # Check symbol group is '\x00\x00'
+            if data[16:18] != '\x00\x00':
+                return False
+
+            # symbol_name point should not be zero
             if data[4:8] == '\x00\x00\x00\x00':
                 return False
+
             # TODO: Need handle this problem
             # sometime data[8:12] will be '\x00\x00\x00\x00'
             # if data[8:12] == '\x00\x00\x00\x00':
             #     return False
-            if data[-8:] in symbol_format_sign_6:
-                return True
-            return False
+            return True
 
         return False
 
@@ -489,7 +523,7 @@ class VxTarget(object):
             return None
 
         for key_word in function_name_key_words:
-            prefix_keyword = '\x00' + key_word + '\x00'
+            prefix_keyword = '\x00_' + key_word + '\x00'
             key_word = '\x00' + key_word + '\x00'
             if key_word in self._firmware is False and prefix_keyword in self._firmware is False:
                 self.logger.info("This firmware didn't contain function name")
