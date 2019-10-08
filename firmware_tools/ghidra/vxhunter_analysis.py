@@ -56,25 +56,6 @@ decompile_function_cache = {
 }
 
 
-def demangle_function_name(function_name):
-    sym_demangled_name = function_name
-    try:
-        sym_demangled = demangler.demangle(function_name, True)
-
-        if not sym_demangled:
-            # some mangled function name didn't start with mangled prefix
-            sym_demangled = demangler.demangle(function_name, False)
-
-        if sym_demangled:
-            sym_demangled_name = sym_demangled.getSignature(False)
-
-    except DemangledException as err:
-        # print("Got DemangledException: {}".format(err))
-        return sym_demangled_name
-
-    return sym_demangled_name
-
-
 def is_address_in_current_program(address):
     for block in currentProgram.memory.blocks:
         if address.offset in range(block.getStart().offset,block.getEnd().offset):
@@ -82,7 +63,7 @@ def is_address_in_current_program(address):
     return False
 
 
-def get_signed_value(data):
+def get_signed_value(input_data):
     pack_format = ""
     if is_big_endian:
         pack_format += ">"
@@ -94,7 +75,8 @@ def get_signed_value(data):
     else:
         pack_format += "I"
 
-    data = struct.pack(pack_format.upper(), data.offset)
+    logger.debug("type(input_data): {}".format(type(input_data)))
+    data = struct.pack(pack_format.upper(), input_data)
     signed_data = struct.unpack(pack_format.lower(), data)[0]
 
     return signed_data
@@ -177,28 +159,40 @@ def calc_pcode_op(pcode):
 
         elif opcode == PcodeOp.PTRADD:
             logger.debug("PTRADD")
-            # TODO: Handle input2
             var_node_0 = FlowNode(pcode.getInput(0))
             var_node_1 = FlowNode(pcode.getInput(1))
             var_node_2 = FlowNode(pcode.getInput(2))
             try:
                 value_0_point = var_node_0.get_value()
                 logger.debug("value_0_point: {}".format(value_0_point))
+                if not isinstance(value_0_point, GenericAddress):
+                    return
                 value_0 = toAddr(getInt(value_0_point))
                 logger.debug("value_0: {}".format(value_0))
                 logger.debug("type(value_0): {}".format(type(value_0)))
                 value_1 = var_node_1.get_value()
                 logger.debug("value_1: {}".format(value_1))
                 logger.debug("type(value_1): {}".format(type(value_1)))
+                if not isinstance(value_1, GenericAddress):
+                    logger.debug("value_1 is not GenericAddress!")
+                    return
                 value_1 = get_signed_value(value_1.offset)
+                # TODO: Handle input2 later
                 value_2 = var_node_2.get_value()
                 logger.debug("value_2: {}".format(value_2))
                 logger.debug("type(value_2): {}".format(type(value_2)))
+                if not isinstance(value_2, GenericAddress):
+                    return
                 output_value = value_0.add(value_1)
                 logger.debug("output_value: {}".format(output_value))
                 return output_value.offset
+
+            except Exception as err:
+                logger.debug("Got something wrong with calc PcodeOp.PTRADD : {}".format(err))
+                return None
+
             except:
-                logger.debug("Got something wrong with calc PcodeOp.PTRADD ")
+                logger.error("Got something wrong with calc PcodeOp.PTRADD ")
                 return None
 
         elif opcode == PcodeOp.INDIRECT:
@@ -395,18 +389,17 @@ def dump_call_parm_value(call_address, search_functions=None):
         for target_reference in target_references:
             # Filter reference type
             reference_type = target_reference.getReferenceType()
-            # print("reference_type: {}".format(reference_type))
-            # print("isJump: {}".format(reference_type.isJump()))
-            # print("isCall: {}".format(reference_type.isCall()))
-            # if reference_type.isJump() is False and reference_type.isCall() is False:
+            logger.debug("reference_type: {}".format(reference_type))
+            logger.debug("isJump: {}".format(reference_type.isJump()))
+            logger.debug("isCall: {}".format(reference_type.isCall()))
             if not reference_type.isCall():
-                # print("skip!")
+                logger.debug("skip!")
                 continue
 
             call_addr = target_reference.getFromAddress()
-            # print("call_addr: {}".format(call_addr))
+            logger.debug("call_addr: {}".format(call_addr))
             function = getFunctionContaining(call_addr)
-            # print("function: {}".format(function))
+            logger.debug("function: {}".format(function))
             if not function:
                 continue
 
@@ -498,13 +491,11 @@ def analyze_login_accouts():
                     parm_data_string += "{}({}), ".format(parm_data, parm_value)
             # remove end ', '
             parm_data_string = parm_data_string.strip(', ')
-            # print("parm_data_string: {}".format(parm_data_string))
-            if debug:
-                print("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, parm_data_string,
-                                                                  call_parms['call_addr'],
-                                                                  call_parms['refrence_function_name'],
-                                                                  call_parms['refrence_function_addr']
-                                                                  ))
+            logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, parm_data_string,
+                                                                     call_parms['call_addr'].offset,
+                                                                     call_parms['refrence_function_name'],
+                                                                     call_parms['refrence_function_addr'].offset
+                                                                     ))
     else:
         print("Can't find loginUserAdd function in firmware")
 

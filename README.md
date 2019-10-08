@@ -7,7 +7,8 @@ The firmware analyze tool is plugins written in Python, mainly used for analyze 
 
 supported reverse tool: 
 * IDA Pro 7.x
-* Ghidra 9.0.4
+* Ghidra 9.x
+* Radare2
 
 Tested firmware:
 * Schneider 140NOE77101 - Ethernet network TCP/IP module
@@ -33,6 +34,12 @@ This script will search hard coded accounts, compiled in services and some other
 ![](docs/images/VxHunter_ghidra_analysis_720.gif)
 
 
+### Radare2 Demo
+
+[How to use VxHunter firmware tools in Radare2](docs/How_to_use_vxhunter_firmware_tools_in_radare2.md)
+
+![](docs/images/VxHunter_Radare2_720.gif)
+ 
 ## VxSerial Debugger - Beta
 The serial debugger tool is written in Python and based on VxWorks command line, usually we can get that command line from VxWorks device using serial port. 
 
