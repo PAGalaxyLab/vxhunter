@@ -63,3 +63,8 @@ This is an example script to debug CVE-2018-19528 vulnerability on TP-Link TL-WR
 Demo Video
 
 [![Demo Video](https://img.youtube.com/vi/ulO8MsoDLLk/0.jpg)](https://www.youtube.com/watch?v=ulO8MsoDLLk)
+
+
+## TODO
+### Firmware Analyze Tool
+* Add Support for VxWorks memory dump file
