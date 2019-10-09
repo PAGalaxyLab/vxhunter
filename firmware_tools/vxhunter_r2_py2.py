@@ -804,6 +804,7 @@ if __name__ == '__main__':
         # Need find how to do it.
         ea += symbol_interval
 
-    print("\n###### Finish here is the flags ######")
+    r2_command = "?E3 Finished, let's see how many functions we found ^_^"
+    print("\n{}".format(r2p.cmd(r2_command)))
     flags = r2p.cmd("fs")
     print(flags)
