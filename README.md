@@ -67,4 +67,5 @@ Demo Video
 
 ## TODO
 ### Firmware Analyze Tool
-* Add Support for VxWorks memory dump file
+* ~~Add Support for VxWorks memory dump file~~
+* Add dynamic loaded symbols analyze for VxWorks memory dump file
