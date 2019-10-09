@@ -787,7 +787,7 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             vx_version = int(form.vx_version)
             print("vx_version:%s" % vx_version)
             firmware_path = idaapi.get_input_file_path()
-            firmware = open(firmware_path).read()
+            firmware = open(firmware_path, 'rb').read()
             target = VxTarget(firmware=firmware, vx_version=vx_version)
             # target.logger.setLevel(logging.DEBUG)
             target.quick_test()
