@@ -1,10 +1,24 @@
+from vxhunter_core import *
 from ghidra.app.decompiler import DecompInterface, DecompileOptions, DecompileResults
 from ghidra.program.model.pcode import HighParam, PcodeOp, PcodeOpAST
 from ghidra.program.model.address import GenericAddress
 from ghidra.app.util.demangler import DemangledException
 from ghidra.app.util.demangler.gnu import GnuDemangler
 from ghidra.program.database.code import DataDB
+from ghidra.program.model.symbol.SourceType import USER_DEFINED
+from ghidra.program.model.util import CodeUnitInsertionException
 from ghidra.program.model.mem import *
+from ghidra.program.model.data import (
+    CharDataType,
+    UnsignedIntegerDataType,
+    IntegerDataType,
+    ShortDataType,
+    PointerDataType,
+    VoidDataType,
+    ByteDataType,
+    ArrayDataType,
+    StructureDataType
+)
 import logging
 import time
 import struct
@@ -12,6 +26,55 @@ import struct
 
 debug = False
 process_is_64bit = False
+
+# Init Structs
+ptr_data_type = PointerDataType()
+byte_data_type = ByteDataType()
+char_data_type = CharDataType()
+void_data_type = VoidDataType()
+unsigned_int_type = UnsignedIntegerDataType()
+short_data_type = ShortDataType()
+char_ptr_type = ptr_data_type.getPointer(char_data_type, 4)
+void_ptr_type = ptr_data_type.getPointer(void_data_type, 4)
+
+vx_5_symtbl_dt = StructureDataType("VX_5_SYMBOL_IN_TBL", 0x10)
+vx_5_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
+vx_5_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
+vx_5_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
+vx_5_symtbl_dt.replaceAtOffset(0x0c, short_data_type, 4, "symGroup", "")
+vx_5_symtbl_dt.replaceAtOffset(0x0e, byte_data_type, 1, "symType", "")
+vx_5_symtbl_dt.replaceAtOffset(0x0f, byte_data_type, 1, "End", "")
+
+vx_6_symtbl_dt = StructureDataType("VX_5_SYMBOL_IN_TBL", 0x14)
+vx_6_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
+vx_6_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
+vx_6_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
+vx_6_symtbl_dt.replaceAtOffset(0x0c, unsigned_int_type, 4, "symRef", "moduleId of module, or predefined SYMREF")
+vx_6_symtbl_dt.replaceAtOffset(0x10, short_data_type, 4, "symGroup", "")
+vx_6_symtbl_dt.replaceAtOffset(0x12, byte_data_type, 1, "symType", "")
+vx_6_symtbl_dt.replaceAtOffset(0x13, byte_data_type, 1, "End", "")
+
+vx_5_sys_symtab = StructureDataType("VX_5_SYSTEM_SYMBOL_TABLE", 0x3C)
+vx_5_sys_symtab.replaceAtOffset(0x00, void_ptr_type, 4, "objCore", "Pointer to object's class")
+vx_5_sys_symtab.replaceAtOffset(0x04, void_ptr_type, 4, "nameHashId", "Pointer to HASH_TBL")
+vx_5_sys_symtab.replaceAtOffset(0x08, char_data_type, 0x28, "symMutex", "symbol table mutual exclusion sem")
+vx_5_sys_symtab.replaceAtOffset(0x30, void_ptr_type, 4, "symPartId", "memory partition id for symbols")
+vx_5_sys_symtab.replaceAtOffset(0x34, unsigned_int_type, 4, "sameNameOk", "symbol table name clash policy")
+vx_5_sys_symtab.replaceAtOffset(0x38, unsigned_int_type, 4, "PART_ID", "current number of symbols in table")
+
+
+vx_5_hash_tbl = StructureDataType("VX_5_HASH_TABLE", 0x18)
+vx_5_hash_tbl.replaceAtOffset(0x00, void_ptr_type, 4, "objCore", "Pointer to object's class")
+vx_5_hash_tbl.replaceAtOffset(0x04, unsigned_int_type, 4, "elements", "Number of elements in table")
+vx_5_hash_tbl.replaceAtOffset(0x08, void_ptr_type, 4, "keyCmpRtn", "Comparator function")
+vx_5_hash_tbl.replaceAtOffset(0x0c, void_ptr_type, 4, "keyRtn", "Pointer to object's class")
+vx_5_hash_tbl.replaceAtOffset(0x10, unsigned_int_type, 4, "keyArg", "Hash function argument")
+vx_5_hash_tbl.replaceAtOffset(0x14, void_ptr_type, 4, "*pHashTbl", "Pointer to hash table array")
+
+vx_5_sl_list = StructureDataType("VX_5_HASH_TABLE", 0x08)
+vx_5_sl_list.replaceAtOffset(0x00, void_ptr_type, 4, "head", "header of list")
+vx_5_sl_list.replaceAtOffset(0x04, void_ptr_type, 4, "tail", "tail of list")
+
 
 # Init Default Logger
 logger = logging.getLogger('Default_logger')
@@ -37,6 +100,7 @@ if process_type.endswith(u'64'):
 
 
 demangler = GnuDemangler()
+listing = currentProgram.getListing()
 can_demangle = demangler.canDemangle(currentProgram)
 
 
@@ -435,6 +499,8 @@ def dump_call_parm_value(call_address, search_functions=None):
 def analyze_bss():
     print('{:-^60}'.format('analyze bss info'))
     target_function = getFunction("bzero")
+    if not target_function:
+        target_function = getFunction("_bzero")
     if target_function:
         parms_data = dump_call_parm_value(call_address=target_function.getEntryPoint(), search_functions=['sysStart',
                                                                                                          'usrInit'])
@@ -464,6 +530,8 @@ def analyze_login_accouts():
     hard_coded_accounts = {}
     print("{:-^60}".format("analyze loginUserAdd function"))
     target_function = getFunction("loginUserAdd")
+    if not target_function:
+        target_function = getFunction("_loginUserAdd")
     if target_function:
         parms_data = dump_call_parm_value(target_function.getEntryPoint())
         for call_addr in parms_data:
@@ -526,7 +594,147 @@ def analyze_service():
     print('{}\r\n'.format("-" * 60))
 
 
+def load_symbom(symbol_name_address, symbol_dest_address, is_function):
+    try:
+        symbol_name_string = createAsciiString(symbol_name_address).getValue()
+        print("symbol_name_string: %s" % symbol_name_string)
+    except CodeUnitInsertionException as err:
+        # Todo: Need find a way to get subString
+        print("Got CodeUnitInsertionException: {}".format(err))
+        return
+    except:
+        return
+
+    try:
+        # Demangle symName
+        sym_demangled_name = None
+        if can_demangle:
+            try:
+                # remove _ prefix before demangle
+                sym_demangled = demangler.demangle(symbol_name_string[1:], True)
+
+                if not sym_demangled:
+                    # some mangled function name didn't start with mangled prefix
+                    sym_demangled = demangler.demangle(symbol_name_string[1:], False)
+
+                if sym_demangled:
+                    sym_demangled_name = sym_demangled.getSignature(False)
+
+            except DemangledException as err:
+                # print("Got DemangledException: {}".format(err))
+                sym_demangled_name = None
+
+            if sym_demangled_name:
+                print("sym_demangled_name: %s" % sym_demangled_name)
+
+        if symbol_name_string and is_function:
+            print("Start disassemble function %s at address %s" % (symbol_name_string,
+                                                                   symbol_dest_address.toString()))
+            disassemble(symbol_dest_address)
+            # TODO: find out why createFunction didn't set the function name.
+            function = createFunction(symbol_dest_address, symbol_name_string)
+            # use createLabel to rename function for now.
+            createLabel(symbol_dest_address, symbol_name_string, True)
+            if function and sym_demangled_name:
+                # Add demangled string to comment
+                codeUnit = listing.getCodeUnitAt(symbol_dest_address)
+                codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
+                # Rename function
+                function_return, function_name, function_parameters = demangle_function(sym_demangled_name)
+                print("Demangled function name is: %s" % function_name)
+                print("Demangled function return is: %s" % function_return)
+                print("Demangled function parameters is: %s" % function_parameters)
+                function.setName(function_name, USER_DEFINED)
+                # Todo: Add parameters later
+
+        elif symbol_name_string:
+            createLabel(symbol_dest_address, symbol_name_string, True)
+
+    except Exception as err:
+        print("Create function Failed: %s" % err)
+
+    except:
+        print("Create function Failed: Java error")
+
+
+def fix_symbol_by_chains(head, tail, vx_version):
+    symbol_interval = 0x10
+    symbol_interval = 16
+    dt = vx_5_symtbl_dt
+    if vx_version == 6:
+        symbol_interval = 20
+        dt = vx_6_symtbl_dt
+    ea = head
+    while True:
+        prev_symbol_addr = toAddr(getInt(ea))
+        symbol_name_address = toAddr(getInt(ea.add(0x04)))
+        symbol_dest_address = toAddr(getInt(ea.add(0x08)))
+        symbol_type = getByte(ea.add(symbol_interval - 2))
+        is_function = False
+        if symbol_type in [5, 4]:
+            is_function = True
+
+        for i in range(dt.getLength()):
+            removeDataAt(ea.add(i))
+
+        createData(ea, dt)
+        load_symbom(symbol_name_address, symbol_dest_address, is_function)
+
+        if getInt(ea) == 0 or ea == tail:
+            break
+
+        ea = prev_symbol_addr
+
+    return
+
+
+def analyze_symbols():
+    sys_sym_tbl = getSymbol('sysSymTbl', currentProgram.getGlobalNamespace())
+    if not sys_sym_tbl:
+        sys_sym_tbl = getSymbol('_sysSymTbl', currentProgram.getGlobalNamespace())
+
+    if not sys_sym_tbl:
+        return
+
+    sys_sym_addr = toAddr(getInt(sys_sym_tbl.getAddress()))
+    if sys_sym_addr.getOffset() == 0:
+        return
+
+    else:
+        try:
+            vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
+            if vx_version == u"5.x":
+                vx_version = 5
+
+            elif vx_version == u"6.x":
+                vx_version = 6
+                print("VxHunter didn't support symbols analyze for VxWorks version 6.x")
+
+            if vx_version == 5:
+                for i in range(vx_5_sys_symtab.getLength()):
+                    removeDataAt(sys_sym_addr.add(i))
+                createData(sys_sym_addr, vx_5_sys_symtab)
+                hash_tbl_addr = toAddr(getInt(sys_sym_addr.add(0x04)))
+                for i in range(vx_5_hash_tbl.getLength()):
+                    removeDataAt(hash_tbl_addr.add(i))
+                createData(hash_tbl_addr, vx_5_hash_tbl)
+                hash_tbl_length = getInt(hash_tbl_addr.add(0x04))
+                hash_tbl_array_addr = toAddr(getInt(hash_tbl_addr.add(0x14)))
+                hash_tbl_array_data_type = ArrayDataType(vx_5_sl_list, hash_tbl_length, vx_5_sl_list.getLength())
+                for i in range(hash_tbl_length):
+                    removeDataAt(hash_tbl_array_addr.add(i))
+                createData(hash_tbl_array_addr, hash_tbl_array_data_type)
+                for i in range(0, hash_tbl_length):
+                    list_head = hash_tbl_array_addr.add(i * 8)
+                    list_tail = hash_tbl_array_addr.add((i * 8) + 0x04)
+                    fix_symbol_by_chains(list_head, list_tail, vx_version)
+
+        except Exception as err:
+            print(err)
+
+
 if __name__ == '__main__':
     analyze_bss()
     analyze_login_accouts()
     analyze_service()
+    analyze_symbols()
