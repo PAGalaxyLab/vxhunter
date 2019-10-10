@@ -45,7 +45,7 @@ vx_5_symtbl_dt.replaceAtOffset(0x0c, short_data_type, 4, "symGroup", "")
 vx_5_symtbl_dt.replaceAtOffset(0x0e, byte_data_type, 1, "symType", "")
 vx_5_symtbl_dt.replaceAtOffset(0x0f, byte_data_type, 1, "End", "")
 
-vx_6_symtbl_dt = StructureDataType("VX_5_SYMBOL_IN_TBL", 0x14)
+vx_6_symtbl_dt = StructureDataType("VX_6_SYMBOL_IN_TBL", 0x14)
 vx_6_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
 vx_6_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
 vx_6_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
@@ -659,7 +659,6 @@ def load_symbom(symbol_name_address, symbol_dest_address, is_function):
 
 def fix_symbol_by_chains(head, tail, vx_version):
     symbol_interval = 0x10
-    symbol_interval = 16
     dt = vx_5_symtbl_dt
     if vx_version == 6:
         symbol_interval = 20
@@ -721,12 +720,12 @@ def analyze_symbols():
                 hash_tbl_length = getInt(hash_tbl_addr.add(0x04))
                 hash_tbl_array_addr = toAddr(getInt(hash_tbl_addr.add(0x14)))
                 hash_tbl_array_data_type = ArrayDataType(vx_5_sl_list, hash_tbl_length, vx_5_sl_list.getLength())
-                for i in range(hash_tbl_length):
+                for i in range(hash_tbl_array_data_type.getLength()):
                     removeDataAt(hash_tbl_array_addr.add(i))
                 createData(hash_tbl_array_addr, hash_tbl_array_data_type)
                 for i in range(0, hash_tbl_length):
-                    list_head = hash_tbl_array_addr.add(i * 8)
-                    list_tail = hash_tbl_array_addr.add((i * 8) + 0x04)
+                    list_head = toAddr(getInt(hash_tbl_array_addr.add(i * 8)))
+                    list_tail = toAddr(getInt(hash_tbl_array_addr.add((i * 8) + 0x04)))
                     fix_symbol_by_chains(list_head, list_tail, vx_version)
 
         except Exception as err:
