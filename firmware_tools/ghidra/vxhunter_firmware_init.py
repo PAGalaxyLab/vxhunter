@@ -6,7 +6,46 @@ from ghidra.program.model.util import CodeUnitInsertionException
 from ghidra.app.util.demangler import DemangledException
 from ghidra.app.util.demangler.gnu import GnuDemangler
 from ghidra.program.model.listing.CodeUnit import PLATE_COMMENT
-from ghidra.program.model.data import DataType
+from ghidra.program.model.data import (
+    CharDataType,
+    UnsignedIntegerDataType,
+    IntegerDataType,
+    ShortDataType,
+    PointerDataType,
+    VoidDataType,
+    ByteDataType,
+    ArrayDataType,
+    StructureDataType
+)
+
+# Init data type
+ptr_data_type = PointerDataType()
+byte_data_type = ByteDataType()
+char_data_type = CharDataType()
+void_data_type = VoidDataType()
+unsigned_int_type = UnsignedIntegerDataType()
+short_data_type = ShortDataType()
+char_ptr_type = ptr_data_type.getPointer(char_data_type, 4)
+void_ptr_type = ptr_data_type.getPointer(void_data_type, 4)
+
+# Init VxWorks symbol table structs
+vx_5_symtbl_dt = StructureDataType("VX_5_SYMBOL_IN_TBL", 0x10)
+vx_5_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
+vx_5_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
+vx_5_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
+vx_5_symtbl_dt.replaceAtOffset(0x0c, short_data_type, 4, "symGroup", "")
+vx_5_symtbl_dt.replaceAtOffset(0x0e, byte_data_type, 1, "symType", "")
+vx_5_symtbl_dt.replaceAtOffset(0x0f, byte_data_type, 1, "End", "")
+
+vx_6_symtbl_dt = StructureDataType("VX_5_SYMBOL_IN_TBL", 0x14)
+vx_6_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
+vx_6_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
+vx_6_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
+vx_6_symtbl_dt.replaceAtOffset(0x0c, unsigned_int_type, 4, "symRef", "moduleId of module, or predefined SYMREF")
+vx_6_symtbl_dt.replaceAtOffset(0x10, short_data_type, 4, "symGroup", "")
+vx_6_symtbl_dt.replaceAtOffset(0x12, byte_data_type, 1, "symType", "")
+vx_6_symtbl_dt.replaceAtOffset(0x13, byte_data_type, 1, "End", "")
+
 
 
 try:
@@ -40,13 +79,22 @@ try:
             print("address: %s" % address)
             currentProgram.memory.moveBlock(target_block, address, TaskMonitor.DUMMY)
 
-            # Rename functions
+            # Create symbol table structs
             symbol_table_start = toAddr(target.symbol_table_start + target.load_address)
             symbol_table_end = toAddr(target.symbol_table_end + target.load_address)
             symbol_interval = 16
+            dt = vx_5_symtbl_dt
             if vx_version == 6:
                 symbol_interval = 20
+                dt = vx_6_symtbl_dt
             ea = symbol_table_start
+            sym_length = (target.symbol_table_end - target.symbol_table_start) // symbol_interval
+            createLabel(symbol_table_start, "vxSymTbl", True)
+            clearListing(symbol_table_start, symbol_table_end)
+            vx_symbol_array_data_type = ArrayDataType(dt, sym_length, dt.getLength())
+            createData(symbol_table_start, vx_symbol_array_data_type)
+
+            # Rename functions
             while ea < symbol_table_end:
                 symbol_name_string = None
                 offset = 4
