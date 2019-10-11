@@ -8,6 +8,7 @@ from ghidra.program.database.code import DataDB
 from ghidra.program.model.symbol.SourceType import USER_DEFINED
 from ghidra.program.model.util import CodeUnitInsertionException
 from ghidra.program.model.mem import *
+from ghidra.program.model.symbol import RefType, SourceType
 from ghidra.program.model.data import (
     CharDataType,
     UnsignedIntegerDataType,
@@ -368,6 +369,9 @@ class FunctionAnalyzer(object):
 
     def get_all_call_pcode(self):
         ops = self.get_function_pcode()
+        if not ops:
+            return
+
         while ops.hasNext():
             pcodeOpAST = ops.next()
             opcode = pcodeOpAST.getOpcode()
@@ -396,7 +400,7 @@ class FunctionAnalyzer(object):
             elif opcode == PcodeOp.CALLIND:
                 target_call_addr = FlowNode(pcodeOpAST.getInput(0)).get_value()
                 self.logger.debug("target_call_addr: {}".format(target_call_addr))
-            self.logger.debug("Calling {}(0x{}) ".format(getFunctionAt(target_call_addr), target_call_addr))
+            # self.logger.debug("Calling {}(0x{}) ".format(getFunctionAt(toAddr(target_call_addr)), target_call_addr))
             inputs = pcodeOpAST.getInputs()
             for i in range(len(inputs))[1:]:
                 parm = inputs[i]
@@ -503,7 +507,10 @@ def analyze_bss():
         target_function = getFunction("_bzero")
     if target_function:
         parms_data = dump_call_parm_value(call_address=target_function.getEntryPoint(), search_functions=['sysStart',
-                                                                                                         'usrInit'])
+                                                                                                          'usrInit',
+                                                                                                          '_sysStart',
+                                                                                                          '_usrInit',
+                                                                                                          ])
         for call_addr in parms_data:
             call_parms = parms_data[call_addr]
             # print(call_parms)
@@ -585,6 +592,8 @@ def analyze_service():
         service_status[service] = "Not available"
         for service_function in vxworks_service_keyword[service]:
             target_function = getFunction(service_function)
+            if not target_function:
+                target_function = getFunction("_{}".format(service_function))
             if target_function:
                 # print("Found {} in firmware, service {} might available".format(service_function, service))
                 service_status[service] = "available"
@@ -733,9 +742,65 @@ def analyze_symbols():
         except Exception as err:
             print(err)
 
+    print('{}\r\n'.format("-" * 60))
+
+def analyze_function_xref_by_symbol_get():
+    print('{:-^60}'.format('analyze symFindByName function call'))
+
+    # symFindByName analyze
+    target_function = getFunction("symFindByName")
+
+    if not target_function:
+        target_function = getFunction("_symFindByName")
+
+    if target_function:
+        parms_data = dump_call_parm_value(call_address=target_function.getEntryPoint())
+        logger.debug("Found {} symFindByName call".format(len(parms_data)))
+        logger.debug("parms_data.keys(): {}".format(parms_data.keys()))
+        currentReferenceManager = currentProgram.getReferenceManager()
+        for call_addr in parms_data:
+            call_parms = parms_data[call_addr]
+            logger.debug("call_parms: {}".format(call_parms))
+            if 'parm_2' not in call_parms['parms'].keys():
+                continue
+
+            searched_symbol_name_ptr = call_parms['parms']['parm_2']['parm_data']
+            if isinstance(searched_symbol_name_ptr, DataDB):
+                searched_symbol_name = searched_symbol_name_ptr.value
+                if isinstance(searched_symbol_name, GenericAddress):
+                    if is_address_in_current_program(searched_symbol_name):
+                        searched_symbol_name = getDataAt(searched_symbol_name)
+                to_function = getFunction(searched_symbol_name.value)
+                if to_function:
+                    ref_to = to_function.getEntryPoint()
+                    ref_from = call_parms['call_addr']
+                    currentReferenceManager.addMemoryReference(ref_from, ref_to, RefType.READ,
+                                                               SourceType.USER_DEFINED, 0)
+                    print("Add Reference for {}( {:#010x} ) function call at {:#010x} in {}( {:#010x} )".format(
+                        to_function,
+                        ref_to.offset,
+                        call_parms['call_addr'].offset,
+                        call_parms['refrence_function_name'],
+                        call_parms['refrence_function_addr'].offset
+                    )
+                    )
+
+            logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, searched_symbol_name,
+                                                                     call_parms['call_addr'].offset,
+                                                                     call_parms['refrence_function_name'],
+                                                                     call_parms['refrence_function_addr'].offset
+                                                                     ))
+
+
+    else:
+        print("Can't find {} function in firmware".format(target_function))
+
+    print('{}\r\n'.format("-" * 60))
+
 
 if __name__ == '__main__':
     analyze_bss()
     analyze_login_accouts()
     analyze_service()
     analyze_symbols()
+    analyze_function_xref_by_symbol_get()
