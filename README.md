@@ -69,3 +69,4 @@ Demo Video
 ### Firmware Analyze Tool
 * ~~Add Support for VxWorks memory dump file~~
 * Add dynamic loaded symbols analyze for VxWorks memory dump file
+* Add Function xref by analyze symFindByName call parameters
