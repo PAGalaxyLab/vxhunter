@@ -122,7 +122,7 @@ decompile_function_cache = {
 
 def is_address_in_current_program(address):
     for block in currentProgram.memory.blocks:
-        if address.offset in range(block.getStart().offset,block.getEnd().offset):
+        if block.getStart().offset <= address.offset <= block.getEnd().offset:
             return True
     return False
 
@@ -602,6 +602,7 @@ def load_symbom(symbol_name_address, symbol_dest_address, is_function):
         # Todo: Need find a way to get subString
         print("Got CodeUnitInsertionException: {}".format(err))
         return
+
     except:
         return
 
@@ -726,7 +727,8 @@ def analyze_symbols():
                 for i in range(0, hash_tbl_length):
                     list_head = toAddr(getInt(hash_tbl_array_addr.add(i * 8)))
                     list_tail = toAddr(getInt(hash_tbl_array_addr.add((i * 8) + 0x04)))
-                    fix_symbol_by_chains(list_head, list_tail, vx_version)
+                    if is_address_in_current_program(list_head) and is_address_in_current_program(list_tail):
+                        fix_symbol_by_chains(list_head, list_tail, vx_version)
 
         except Exception as err:
             print(err)
