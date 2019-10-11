@@ -606,10 +606,10 @@ def analyze_service():
 def load_symbom(symbol_name_address, symbol_dest_address, is_function):
     try:
         symbol_name_string = createAsciiString(symbol_name_address).getValue()
-        print("symbol_name_string: %s" % symbol_name_string)
+        logger.debug("symbol_name_string: %s" % symbol_name_string)
     except CodeUnitInsertionException as err:
         # Todo: Need find a way to get subString
-        print("Got CodeUnitInsertionException: {}".format(err))
+        logger.debug("Got CodeUnitInsertionException: {}".format(err))
         return
 
     except:
@@ -635,11 +635,11 @@ def load_symbom(symbol_name_address, symbol_dest_address, is_function):
                 sym_demangled_name = None
 
             if sym_demangled_name:
-                print("sym_demangled_name: %s" % sym_demangled_name)
+                logger.debug("sym_demangled_name: %s" % sym_demangled_name)
 
         if symbol_name_string and is_function:
-            print("Start disassemble function %s at address %s" % (symbol_name_string,
-                                                                   symbol_dest_address.toString()))
+            logger.debug("Start disassemble function %s at address %s" % (symbol_name_string,
+                                                                          symbol_dest_address.toString()))
             disassemble(symbol_dest_address)
             # TODO: find out why createFunction didn't set the function name.
             function = createFunction(symbol_dest_address, symbol_name_string)
@@ -651,9 +651,9 @@ def load_symbom(symbol_name_address, symbol_dest_address, is_function):
                 codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
                 # Rename function
                 function_return, function_name, function_parameters = demangle_function(sym_demangled_name)
-                print("Demangled function name is: %s" % function_name)
-                print("Demangled function return is: %s" % function_return)
-                print("Demangled function parameters is: %s" % function_parameters)
+                logger.debug("Demangled function name is: %s" % function_name)
+                logger.debug("Demangled function return is: %s" % function_return)
+                logger.debug("Demangled function parameters is: %s" % function_parameters)
                 function.setName(function_name, USER_DEFINED)
                 # Todo: Add parameters later
 
@@ -661,10 +661,10 @@ def load_symbom(symbol_name_address, symbol_dest_address, is_function):
             createLabel(symbol_dest_address, symbol_name_string, True)
 
     except Exception as err:
-        print("Create function Failed: %s" % err)
+        logger.debug("Create function Failed: %s" % err)
 
     except:
-        print("Create function Failed: Java error")
+        logger.debug("Create function Failed: Java error")
 
 
 def fix_symbol_by_chains(head, tail, vx_version):
@@ -698,6 +698,9 @@ def fix_symbol_by_chains(head, tail, vx_version):
 
 
 def analyze_symbols():
+    print('{:-^60}'.format('analyze symbols using sysSymTbl'))
+    function_manager = currentProgram.getFunctionManager()
+    functions_count_before = function_manager.getFunctionCount()
     sys_sym_tbl = getSymbol('sysSymTbl', currentProgram.getGlobalNamespace())
     if not sys_sym_tbl:
         sys_sym_tbl = getSymbol('_sysSymTbl', currentProgram.getGlobalNamespace())
@@ -720,6 +723,7 @@ def analyze_symbols():
                 print("VxHunter didn't support symbols analyze for VxWorks version 6.x")
 
             if vx_version == 5:
+                print("Functions count: {}(Before analyze) ".format(functions_count_before))
                 for i in range(vx_5_sys_symtab.getLength()):
                     removeDataAt(sys_sym_addr.add(i))
                 createData(sys_sym_addr, vx_5_sys_symtab)
@@ -738,11 +742,14 @@ def analyze_symbols():
                     list_tail = toAddr(getInt(hash_tbl_array_addr.add((i * 8) + 0x04)))
                     if is_address_in_current_program(list_head) and is_address_in_current_program(list_tail):
                         fix_symbol_by_chains(list_head, list_tail, vx_version)
-
+                functions_count_after = function_manager.getFunctionCount()
+                print("Functions count: {}(After analyze) ".format(functions_count_after))
+                print("VxHunter found {} new functions".format(functions_count_after - functions_count_before))
         except Exception as err:
             print(err)
 
     print('{}\r\n'.format("-" * 60))
+
 
 def analyze_function_xref_by_symbol_get():
     print('{:-^60}'.format('analyze symFindByName function call'))
@@ -785,11 +792,11 @@ def analyze_function_xref_by_symbol_get():
                     )
                     )
 
-            logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, searched_symbol_name,
-                                                                     call_parms['call_addr'].offset,
-                                                                     call_parms['refrence_function_name'],
-                                                                     call_parms['refrence_function_addr'].offset
-                                                                     ))
+                logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, searched_symbol_name,
+                                                                         call_parms['call_addr'].offset,
+                                                                         call_parms['refrence_function_name'],
+                                                                         call_parms['refrence_function_addr'].offset
+                                                                         ))
 
 
     else:
