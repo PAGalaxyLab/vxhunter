@@ -656,6 +656,7 @@ def demangle_function(demangle_string):
 def autodetect_vxworks_version(r2p):
     ''' Naive way to autodetect VxWorks version '''
     vx_version = None
+    # TODO: replace with cmdj and izzzj later, currently izzzj is not stable.
     vx_version_r2p = r2p.cmd("izz~VxWorks")
     if 'VxWorks5' in vx_version_r2p:
         vx_version = 5
@@ -708,10 +709,9 @@ if __name__ == '__main__':
         print("vx_version:{}".format(vx_version))
 
     # only use first file
-    opened_file_data = r2p.cmd("o*")
-    firmware_path = r2p.cmd("o*").split()[1]
+    opened_file_data = r2p.cmdj("oj*")[0]
+    firmware_path = opened_file_data['uri']
     print("firmware_path: {}".format(firmware_path))
-    current_load_address = r2p.cmd("o*").split()[2]
 
     firmware = open(firmware_path, 'rb').read()
     target = VxTarget(firmware=firmware, vx_version=vx_version)
@@ -739,7 +739,9 @@ if __name__ == '__main__':
     # close all open files
     r2p.cmd("o--")
     # backup current asm bits
-    current_asm_bits = r2p.cmd("e asm.bits")
+    current_conf = r2p.cmdj("ej")
+    current_asm_bits = current_conf['asm.bits']
+    print('Current asm.bits={}'.format(current_asm_bits))
     # map image to correct load address
     r2_command = "o {} {} r-x".format(firmware_path, hex(image_load_address))
     print("Rebase with r2 command: {}".format(r2_command))
@@ -767,12 +769,12 @@ if __name__ == '__main__':
     while ea < symbol_table_end_address:
         symbol_name_string = None
         offset = 4
-        r2_command = "pv4 @0x{:08X}".format(ea + symbol_interval - 4)
-        symbol_flag = int(r2p.cmd(r2_command).strip('\n'), 16)
-        r2_command = "pv4 @0x{:08X}".format(ea + offset)
-        symbol_name_address = int(r2p.cmd(r2_command).strip('\n'), 16)
-        r2_command = "pv4 @0x{:08X}".format(ea + offset + 4)
-        symbol_dest_address = int(r2p.cmd(r2_command).strip('\n'), 16)
+        r2_command = "pv4j @0x{:08X}".format(ea + symbol_interval - 4)
+        symbol_flag = r2p.cmdj(r2_command)[0]['value']
+        r2_command = "pv4j @0x{:08X}".format(ea + offset)
+        symbol_name_address = r2p.cmdj(r2_command)[0]['value']
+        r2_command = "pv4j @0x{:08X}".format(ea + offset + 4)
+        symbol_dest_address = r2p.cmdj(r2_command)[0]['value']
         # print("symbol_flag: 0x{:08X}".format(symbol_flag))
         # print("symbol_name_address: 0x{:08X}".format(symbol_name_address))
         # print("symbol_dest_address: 0x{:08X}".format(symbol_dest_address))
@@ -782,9 +784,8 @@ if __name__ == '__main__':
 
         # Get symbol name
         try:
-            r2_command = "pvz @0x{:08X}".format(symbol_name_address)
-            symbol_name_string = r2p.cmd(r2_command).strip('\n')
-            # print("symbol_name_string: {}".format(symbol_name_string))
+            r2_command = "pszj @0x{:08X}".format(symbol_name_address)
+            symbol_name_string = r2p.cmdj(r2_command)['string']
 
         except Exception as err:
             print("Exception: {}".format(err))
@@ -807,7 +808,14 @@ if __name__ == '__main__':
         # Need find how to do it.
         ea += symbol_interval
 
-    r2_command = "?E3 Finished, let's see how many functions we found ^_^"
+    flags = r2p.cmdj("fsj")
+    function_count = 0
+    symbol_count = 0
+    for flag in flags:
+        if flag['name'] == "functions":
+            function_count = flag["count"]
+        elif flag['name'] == "symbols":
+            symbol_count = flag["count"]
+
+    r2_command = "?E3 Finished, VxHunter found {} functions and {} symbols ^_^".format(function_count, symbol_count)
     print("\n{}".format(r2p.cmd(r2_command)))
-    flags = r2p.cmd("fs")
-    print(flags)
