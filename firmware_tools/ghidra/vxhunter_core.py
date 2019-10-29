@@ -227,8 +227,15 @@ class VxTarget(object):
         if self.symbol_table_start:
             for i in range(self.symbol_table_start, len(self._firmware), self._symbol_interval):
                 check_data = self._firmware[i:i + self._symbol_interval]
+
+                if len(check_data) < self._symbol_interval:
+                    self.logger.debug("Check_data length is to small")
+                    break
+
                 if self._check_symbol_format_simple(check_data):
                     self.symbol_table_end = i + self._symbol_interval
+                    print("self.symbol_table_end: {:010x}".format(self.symbol_table_end))
+
                 else:
                     self.logger.info("symbol table end offset: %s" % hex(self.symbol_table_end))
                     break
