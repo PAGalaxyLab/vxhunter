@@ -37,7 +37,7 @@ vx_5_symtbl_dt.replaceAtOffset(0x0c, short_data_type, 4, "symGroup", "")
 vx_5_symtbl_dt.replaceAtOffset(0x0e, byte_data_type, 1, "symType", "")
 vx_5_symtbl_dt.replaceAtOffset(0x0f, byte_data_type, 1, "End", "")
 
-vx_6_symtbl_dt = StructureDataType("VX_5_SYMBOL_IN_TBL", 0x14)
+vx_6_symtbl_dt = StructureDataType("VX_6_SYMBOL_IN_TBL", 0x14)
 vx_6_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
 vx_6_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
 vx_6_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
