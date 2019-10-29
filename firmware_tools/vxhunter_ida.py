@@ -16,7 +16,7 @@ vx_5_sym_types = [
     # 0x00,      # Undefined Symbol
     # 0x01,      # Global (external)
     # 0x02,      # Local Absolute
-    # 0x03,      # Global Absolute
+    0x03,      # Global Absolute
     0x04,      # Local .text
     0x05,      # Global .text
     0x06,      # Local Data
@@ -36,7 +36,7 @@ vx_6_sym_types = [
     # 0x00,  # Undefined Symbol
     # 0x01,  # Global (external)
     # 0x02,  # Local Absolute
-    # 0x03,  # Global Absolute
+    0x03,  # Global Absolute
     0x04,  # Local .text
     0x05,  # Global .text
     0x08,  # Local Data
@@ -129,6 +129,10 @@ class VxTarget(object):
         # check symbol data match struct
         for i in range(default_check_count):
             check_data_1 = check_data[i * self._symbol_interval:(i + 1) * self._symbol_interval]
+            if len(check_data_1) < self._symbol_interval:
+                self.logger.debug("check_data_1 length is too small")
+                break
+
             if self._check_symbol_format_simple(check_data_1) is False:
                 return False
 
@@ -230,8 +234,18 @@ class VxTarget(object):
         if self.symbol_table_start:
             for i in range(self.symbol_table_start, len(self._firmware), self._symbol_interval):
                 check_data = self._firmware[i:i + self._symbol_interval]
+                if len(check_data) < self._symbol_interval:
+                    self.logger.debug("Check_data length is too small")
+                    break
+
+                if len(check_data) < self._symbol_interval:
+                    self.logger.debug("Check_data length is too small")
+                    break
+
                 if self._check_symbol_format_simple(check_data):
                     self.symbol_table_end = i + self._symbol_interval
+                    self.logger.debug("self.symbol_table_end: {:010x}".format(self.symbol_table_end))
+
                 else:
                     self.logger.info("symbol table end offset: %s" % hex(self.symbol_table_end))
                     break

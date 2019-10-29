@@ -16,7 +16,7 @@ vx_5_sym_types = [
     # 0x00,      # Undefined Symbol
     # 0x01,      # Global (external)
     # 0x02,      # Local Absolute
-    # 0x03,      # Global Absolute
+    0x03,      # Global Absolute
     0x04,      # Local .text
     0x05,      # Global .text
     0x06,      # Local Data
@@ -36,7 +36,7 @@ vx_6_sym_types = [
     # 0x00,  # Undefined Symbol
     # 0x01,  # Global (external)
     # 0x02,  # Local Absolute
-    # 0x03,  # Global Absolute
+    0x03,  # Global Absolute
     0x04,  # Local .text
     0x05,  # Global .text
     0x08,  # Local Data
@@ -129,6 +129,10 @@ class VxTarget(object):
         # check symbol data match struct
         for i in range(default_check_count):
             check_data_1 = check_data[i * self._symbol_interval:(i + 1) * self._symbol_interval]
+            if len(check_data_1) < self._symbol_interval:
+                self.logger.debug("check_data_1 length is too small")
+                break
+
             if self._check_symbol_format_simple(check_data_1) is False:
                 return False
 
@@ -189,11 +193,12 @@ class VxTarget(object):
         elif self._vx_version == 6:
             # Check symbol type is valid
             sym_type = data[18]
+            # print(data)
             if sym_type not in vx_6_sym_types:
                 return False
 
             # symbol should end with '\x00'
-            if data[19] != b'\x00':
+            if data[19] != 0:
                 return False
 
             # Check symbol group is '\x00\x00'
@@ -230,8 +235,14 @@ class VxTarget(object):
         if self.symbol_table_start:
             for i in range(self.symbol_table_start, len(self._firmware), self._symbol_interval):
                 check_data = self._firmware[i:i + self._symbol_interval]
+                if len(check_data) < self._symbol_interval:
+                    self.logger.debug("Check_data length is too small")
+                    break
+
                 if self._check_symbol_format_simple(check_data):
                     self.symbol_table_end = i + self._symbol_interval
+                    self.logger.debug("self.symbol_table_end: {:010x}".format(self.symbol_table_end))
+
                 else:
                     self.logger.info("symbol table end offset: %s" % hex(self.symbol_table_end))
                     break
@@ -741,7 +752,6 @@ if __name__ == '__main__':
     # backup current asm bits
     current_conf = r2p.cmdj("ej")
     current_asm_bits = current_conf['asm.bits']
-    print('Current asm.bits={}'.format(current_asm_bits))
     # map image to correct load address
     r2_command = "o {} {} r-x".format(firmware_path, hex(image_load_address))
     print("Rebase with r2 command: {}".format(r2_command))
