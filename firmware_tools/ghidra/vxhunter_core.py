@@ -126,6 +126,10 @@ class VxTarget(object):
         # check symbol data match struct
         for i in range(default_check_count):
             check_data_1 = check_data[i * self._symbol_interval:(i + 1) * self._symbol_interval]
+            if len(check_data_1) < self._symbol_interval:
+                self.logger.debug("check_data_1 length is too small")
+                break
+
             if self._check_symbol_format_simple(check_data_1) is False:
                 return False
 
