@@ -13,7 +13,7 @@ vx_5_sym_types = [
     # 0x00,      # Undefined Symbol
     # 0x01,      # Global (external)
     # 0x02,      # Local Absolute
-    # 0x03,      # Global Absolute
+    0x03,      # Global Absolute
     0x04,      # Local .text
     0x05,      # Global .text
     0x06,      # Local Data
@@ -33,7 +33,7 @@ vx_6_sym_types = [
     # 0x00,  # Undefined Symbol
     # 0x01,  # Global (external)
     # 0x02,  # Local Absolute
-    # 0x03,  # Global Absolute
+    0x03,  # Global Absolute
     0x04,  # Local .text
     0x05,  # Global .text
     0x08,  # Local Data
