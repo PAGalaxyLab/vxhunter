@@ -664,6 +664,19 @@ def demangle_function(demangle_string):
     return function_return, function_name, function_parameters
 
 
+def is_vx_symbol_file(file_data, is_big_endian=True):
+    # Check key function names
+    for key_function in function_name_key_words:
+        if key_function not in file_data:
+            print("key function not found")
+            return False
+
+    if is_big_endian:
+        return struct.unpack('>I', file_data[:4])[0] == len(file_data)
+
+    else:
+        return struct.unpack('<I', file_data[:4])[0] == len(file_data)
+
 
 # --------------------------------------------------------------------------
 # Plugin
@@ -768,6 +781,8 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             VxHunterMCFixCode.register(self, "Fix Code from start address to end address")
             # Register Fix Ascii handler
             VxHunterMCFixAscii.register(self, "Fix Ascii string table with giving address")
+            # Register Load symbol file handler
+            VxHunterMCLoadSymbolFile.register(self, "Load VxWorks symbol file")
 
         except Exception as err:
             print("Got Error!!!: %s" % err)
@@ -778,6 +793,7 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             idaapi.attach_action_to_menu("Edit/VxHunter/", VxHunterMCFixIDB.get_name(), idaapi.SETMENU_APP)
             idaapi.attach_action_to_menu("Edit/VxHunter/", VxHunterMCFixCode.get_name(), idaapi.SETMENU_APP)
             idaapi.attach_action_to_menu("Edit/VxHunter/", VxHunterMCFixAscii.get_name(), idaapi.SETMENU_APP)
+            idaapi.attach_action_to_menu("Edit/VxHunter/", VxHunterMCLoadSymbolFile.get_name(), idaapi.SETMENU_APP)
         else:
             # add Vxhunter menu
             menu = idaapi.add_menu_item("Edit/VxHunter/", "Auto Fix IDB1", "", 1, self.handler_auto_fix_idb, None)
@@ -837,6 +853,9 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             self.fix_ascii(string_address)
 
         form.Free()
+
+    def handler_load_symbol_file(self):
+        self.load_symbol_file()
 
     @staticmethod
     def fix_vxworks_idb(load_address, vx_version, symbol_table_start, symbol_table_end):
@@ -958,6 +977,69 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             else:
                 break
 
+    def load_symbols(self, file_data, is_big_endian=True):
+        symbol_list = []
+        if is_big_endian:
+            unpack_format = '>I'
+        else:
+            unpack_format = '<I'
+
+        symbol_count = struct.unpack(unpack_format, file_data[4:8])[0]
+        print("symbol_count: %s" % symbol_count)
+        symbol_offset = 8
+        string_table_offset = 8 + 8 * symbol_count
+        print("string_table_offset: %s" % string_table_offset)
+        # get symbols
+        for i in range(symbol_count):
+            offset = i * 8
+            symbol_data = file_data[symbol_offset + offset:symbol_offset + offset + 8]
+            flag = ord(symbol_data[0])
+            string_offset = struct.unpack(unpack_format, '\x00' + symbol_data[1:4])[0]
+            string_offset += string_table_offset
+            print("string_offset: %s" % string_offset)
+            symbol_name = ""
+            while True:
+                if file_data[string_offset] != '\x00':
+                    symbol_name += file_data[string_offset]
+                    string_offset += 1
+
+                else:
+                    break
+            print("symbol_name: %s" % symbol_name)
+            symbol_address = struct.unpack(unpack_format, symbol_data[-4:])[0]
+            symbol_list.append([flag, symbol_name, symbol_address])
+            # Find TP-Link device loading address with symbols
+            if "wrs_kernel_text_start" in symbol_name:
+                load_address = symbol_address
+                current_image_base = idaapi.get_imagebase()
+                shift_address = load_address - current_image_base
+                while shift_address >= 0x70000000:
+                    idaapi.rebase_program(0x70000000, 0x0008)
+                    shift_address -= 0x70000000
+                idaapi.rebase_program(shift_address, 0x0008)
+
+        # load symbols
+        for symbol_data in symbol_list:
+            flag, symbol_name, symbol_address = symbol_data
+            idc.MakeName(symbol_address, symbol_name)
+            if flag == 0x54:
+                if symbol_name:
+                    print("Start fix Function %s at %s" % (symbol_name, hex(symbol_address)))
+                    idc.MakeCode(symbol_address)  # might not need
+                    idc.MakeFunction(symbol_address, idc.BADADDR)
+
+    def load_symbol_file(self):
+        print("Bingo")
+        symbol_file_path = AskFile(0, "*", "Please chose the VxWorks symbol file")
+        print("symbol_file_path: {}".format(symbol_file_path))
+        symbol_file_data = open(symbol_file_path, 'rb').read()
+        if is_vx_symbol_file(symbol_file_data):
+            self.load_symbols(symbol_file_data)
+            idaapi.autoWait()
+
+        else:
+            return
+
     def run(self, arg):
         self.handler_auto_fix_idb()
 
@@ -1023,14 +1105,17 @@ try:
             self.plugin.handler_fix_ascii()
             return 1
 
+    class VxHunterMCLoadSymbolFile(VxHunterMenuContext):
+        def activate(self, ctx):
+            self.plugin.handler_load_symbol_file()
+            return 1
+
+
 except Exception as err:
     # TODO: Add some handle later.
-    pass
+    print("err: {}".format(err))
 
 
 # register IDA plugin
 def PLUGIN_ENTRY():
     return VxHunter_Plugin_t()
-
-
-
