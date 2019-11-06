@@ -20,6 +20,12 @@ parser.add_argument('-o',
 
 
 def extract_firmware(source_file_data, output_path):
+    """Cisco VxWorks firmware extract function
+
+    :param source_file_data:
+    :param output_path:
+    :return:
+    """
     file_count = struct.unpack("<I", source_file_data[0x20:0x24])[0]
     print("Found {} files in firmware".format(file_count))
     print("Star extract files")
@@ -80,9 +86,10 @@ if __name__ == '__main__':
     else:
         input_file_name = os.path.basename(args.input_firmware_path)
         output_path = "./{}.extracted".format(input_file_name)
+        temp_out_path = output_path
         index = 1
         while os.path.exists(output_path):
-            output_path = "{}_{}".format(output_path, index)
+            output_path = "{}_{}".format(temp_out_path, index)
             index += 1
 
         try:
