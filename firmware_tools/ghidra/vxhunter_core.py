@@ -47,6 +47,7 @@ vx_6_sym_types = [
 ]
 
 need_create_function = [
+    0x04,
     0x05
 ]
 
@@ -65,7 +66,7 @@ class VxTarget(object):
         self.symbol_table_end = None
         self._string_table = []
         self._symbol_table = []
-        self.symbols =[]
+        self.symbols = []
         self.load_address = None
         self._firmware = firmware
         self._has_symbol = None

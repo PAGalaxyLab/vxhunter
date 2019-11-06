@@ -72,7 +72,7 @@ vx_5_hash_tbl.replaceAtOffset(0x0c, void_ptr_type, 4, "keyRtn", "Pointer to obje
 vx_5_hash_tbl.replaceAtOffset(0x10, unsigned_int_type, 4, "keyArg", "Hash function argument")
 vx_5_hash_tbl.replaceAtOffset(0x14, void_ptr_type, 4, "*pHashTbl", "Pointer to hash table array")
 
-vx_5_sl_list = StructureDataType("VX_5_HASH_TABLE", 0x08)
+vx_5_sl_list = StructureDataType("VX_5_HASH_TABLE_LIST", 0x08)
 vx_5_sl_list.replaceAtOffset(0x00, void_ptr_type, 4, "head", "header of list")
 vx_5_sl_list.replaceAtOffset(0x04, void_ptr_type, 4, "tail", "tail of list")
 
@@ -80,10 +80,10 @@ vx_5_sl_list.replaceAtOffset(0x04, void_ptr_type, 4, "tail", "tail of list")
 # Init Default Logger
 logger = logging.getLogger('Default_logger')
 logger.setLevel(logging.INFO)
-consolehandler = logging.StreamHandler()
+console_handler = logging.StreamHandler()
 console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
-consolehandler.setFormatter(console_format)
-logger.addHandler(consolehandler)
+console_handler.setFormatter(console_format)
+logger.addHandler(console_handler)
 
 if debug:
     logger.setLevel(logging.DEBUG)
@@ -603,51 +603,65 @@ def analyze_service():
     print('{}\r\n'.format("-" * 60))
 
 
-def load_symbom(symbol_name_address, symbol_dest_address, is_function):
+def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
+    symbol_name_address = toAddr(symbol_name_address)
+    symbol_address = toAddr(symbol_address)
+
+    # Get symbol_name
+    if getDataAt(symbol_name_address):
+        logger.debug("removeDataAt: %s" % symbol_name_address)
+        removeDataAt(symbol_name_address)
+
+    if getInstructionAt(symbol_address):
+        logger.debug("removeInstructionAt: %s" % symbol_address)
+        removeInstructionAt(symbol_address)
+
     try:
         symbol_name_string = createAsciiString(symbol_name_address).getValue()
         logger.debug("symbol_name_string: %s" % symbol_name_string)
+
     except CodeUnitInsertionException as err:
-        # Todo: Need find a way to get subString
         logger.debug("Got CodeUnitInsertionException: {}".format(err))
-        return
+        symbol_name_string = symbol_name
 
     except:
         return
 
+    # Demangle symName
     try:
         # Demangle symName
         sym_demangled_name = None
         if can_demangle:
             try:
-                # remove _ prefix before demangle
-                sym_demangled = demangler.demangle(symbol_name_string[1:], True)
+                sym_demangled = demangler.demangle(symbol_name_string, True)
 
                 if not sym_demangled:
                     # some mangled function name didn't start with mangled prefix
+                    sym_demangled = demangler.demangle(symbol_name_string, False)
+
+                if not sym_demangled:
+                    # Temp fix to handle _ prefix function name by remove _ prefix before demangle
                     sym_demangled = demangler.demangle(symbol_name_string[1:], False)
 
                 if sym_demangled:
                     sym_demangled_name = sym_demangled.getSignature(False)
 
             except DemangledException as err:
-                # print("Got DemangledException: {}".format(err))
                 sym_demangled_name = None
 
             if sym_demangled_name:
                 logger.debug("sym_demangled_name: %s" % sym_demangled_name)
 
-        if symbol_name_string and is_function:
-            logger.debug("Start disassemble function %s at address %s" % (symbol_name_string,
-                                                                          symbol_dest_address.toString()))
-            disassemble(symbol_dest_address)
+        if symbol_name_string and (symbol_type in need_create_function):
+            logger.debug("Start disassemble function %s at address %s" % (symbol_name_string, symbol_address.toString()))
+            disassemble(symbol_address)
             # TODO: find out why createFunction didn't set the function name.
-            function = createFunction(symbol_dest_address, symbol_name_string)
+            function = createFunction(symbol_address, symbol_name_string)
             # use createLabel to rename function for now.
-            createLabel(symbol_dest_address, symbol_name_string, True)
+            createLabel(symbol_address, symbol_name_string, True)
             if function and sym_demangled_name:
                 # Add demangled string to comment
-                codeUnit = listing.getCodeUnitAt(symbol_dest_address)
+                codeUnit = listing.getCodeUnitAt(symbol_address)
                 codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
                 # Rename function
                 function_return, function_name, function_parameters = demangle_function(sym_demangled_name)
@@ -656,9 +670,11 @@ def load_symbom(symbol_name_address, symbol_dest_address, is_function):
                 logger.debug("Demangled function parameters is: %s" % function_parameters)
                 function.setName(function_name, USER_DEFINED)
                 # Todo: Add parameters later
-
-        elif symbol_name_string:
-            createLabel(symbol_dest_address, symbol_name_string, True)
+        else:
+            createLabel(symbol_address, symbol_name_string, True)
+            if sym_demangled_name:
+                codeUnit = listing.getCodeUnitAt(symbol_address)
+                codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
 
     except Exception as err:
         logger.debug("Create function Failed: %s" % err)
@@ -676,18 +692,17 @@ def fix_symbol_by_chains(head, tail, vx_version):
     ea = head
     while True:
         prev_symbol_addr = toAddr(getInt(ea))
-        symbol_name_address = toAddr(getInt(ea.add(0x04)))
-        symbol_dest_address = toAddr(getInt(ea.add(0x08)))
+        symbol_name_address = getInt(ea.add(0x04))
+        symbol_dest_address = getInt(ea.add(0x08))
         symbol_type = getByte(ea.add(symbol_interval - 2))
-        is_function = False
-        if symbol_type in [5, 4]:
-            is_function = True
 
         for i in range(dt.getLength()):
             removeDataAt(ea.add(i))
 
         createData(ea, dt)
-        load_symbom(symbol_name_address, symbol_dest_address, is_function)
+        # Using symbol_address as default symbol_name.
+        symbol_name = "0x{:08X}".format(symbol_dest_address)
+        add_symbol(symbol_name, symbol_name_address, symbol_dest_address, symbol_type)
 
         if getInt(ea) == 0 or ea == tail:
             break
