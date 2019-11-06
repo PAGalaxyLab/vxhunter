@@ -50,8 +50,8 @@ vx_6_sym_types = [
 ]
 
 need_create_function = [
-    0x0500,
-    0x050000
+    0x04,
+    0x05
 ]
 
 
@@ -69,6 +69,7 @@ class VxTarget(object):
         self.symbol_table_end = None
         self._string_table = []
         self._symbol_table = []
+        self.symbols = []
         self.load_address = None
         self._firmware = firmware
         self._has_symbol = None
@@ -234,6 +235,7 @@ class VxTarget(object):
         if self.symbol_table_start:
             for i in range(self.symbol_table_start, len(self._firmware), self._symbol_interval):
                 check_data = self._firmware[i:i + self._symbol_interval]
+
                 if len(check_data) < self._symbol_interval:
                     self.logger.debug("Check_data length is too small")
                     break
@@ -263,6 +265,7 @@ class VxTarget(object):
         for i in range(self.symbol_table_start, self.symbol_table_end, self._symbol_interval):
             symbol_name_addr = self._firmware[i + 4:i + 8]
             symbol_dest_addr = self._firmware[i + 8:i + 12]
+            symbol_flag = ord(self._firmware[i + self._symbol_interval - 2])
             if self.big_endian:
                 unpack_format = '>I'
             else:
@@ -275,6 +278,7 @@ class VxTarget(object):
                 'symbol_name_addr': symbol_name_addr,
                 'symbol_name_length': None,
                 'symbol_dest_addr': symbol_dest_addr,
+                'symbol_flag': symbol_flag,
                 'offset': i
             })
         # self.logger.debug("self._symbol_table: %s" % self._symbol_table)
@@ -620,6 +624,38 @@ class VxTarget(object):
         self.load_address = None
         self._has_symbol = None
 
+    def get_string_from_firmware_by_offset(self, string_offset):
+        symbol_name = ""
+        while True:
+            if self._firmware[string_offset] != '\x00':
+                symbol_name += self._firmware[string_offset]
+                string_offset += 1
+
+            else:
+                break
+
+        return symbol_name
+
+    def get_symbols(self):
+        self.symbols = []
+        if self.load_address:
+            for symbol in self._symbol_table:
+                symbol_name_addr = symbol["symbol_name_addr"]
+                symbol_dest_addr = symbol["symbol_dest_addr"]
+                symbol_flag = symbol["symbol_flag"]
+                symbol_name_firmware_addr = symbol_name_addr - self.load_address
+                symbol_name = self.get_string_from_firmware_by_offset(symbol_name_firmware_addr)
+                self.symbols.append({
+                    "symbol_name": symbol_name,
+                    "symbol_name_addr": symbol_name_addr,
+                    "symbol_dest_addr": symbol_dest_addr,
+                    "symbol_flag": symbol_flag
+                })
+            return self.symbols
+
+        else:
+            return None
+
 
 def demangle_function(demangle_string):
     function_return = None
@@ -690,6 +726,23 @@ def manual_vxworks_version():
 
         else:
             return None
+
+
+def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
+    # Load symbols
+    if symbol_name:
+        if symbol_type in need_create_function:
+            r2_command = "fs functions; f {} @ 0x{:08X}".format(symbol_name, symbol_address)
+            r2p.cmd(r2_command)
+            # TODO: Need find a way to disable warnning "af: Cannot find function at"
+            r2_command = "af {} 0x{:08X}".format(symbol_name, symbol_address)
+            r2p.cmd(r2_command)
+
+        else:
+            r2_command = "fs symbols; f {} @ 0x{:08X}".format(symbol_name, symbol_address)
+            r2p.cmd(r2_command)
+
+    return
 
 
 if __name__ == '__main__':
@@ -764,55 +817,17 @@ if __name__ == '__main__':
     if target.big_endian:
         r2p.cmd("e cfg.bigendian=True")
 
-    symbol_table_start_address += image_load_address
-    symbol_table_end_address += image_load_address
-    print("symbol_table_start_address: 0x{:08X}".format(symbol_table_start_address))
-    print("symbol_table_end_address: 0x{:08X}".format(symbol_table_end_address))
-    symbol_interval = 16
-    if vx_version == 6:
-        symbol_interval = 20
-    ea = symbol_table_start_address
-    while ea < symbol_table_end_address:
-        symbol_name_string = None
-        offset = 4
-        r2_command = "pv4j @0x{:08X}".format(ea + symbol_interval - 4)
-        symbol_flag = r2p.cmdj(r2_command)[0]['value']
-        r2_command = "pv4j @0x{:08X}".format(ea + offset)
-        symbol_name_address = r2p.cmdj(r2_command)[0]['value']
-        r2_command = "pv4j @0x{:08X}".format(ea + offset + 4)
-        symbol_dest_address = r2p.cmdj(r2_command)[0]['value']
-        # print("symbol_flag: 0x{:08X}".format(symbol_flag))
-        # print("symbol_name_address: 0x{:08X}".format(symbol_name_address))
-        # print("symbol_dest_address: 0x{:08X}".format(symbol_dest_address))
-        if not symbol_dest_address:
-            ea += symbol_interval
-            continue
-
-        # Get symbol name
+    symbols = target.get_symbols()
+    for symbol in symbols:
         try:
-            r2_command = "pszj @0x{:08X}".format(symbol_name_address)
-            symbol_name_string = r2p.cmdj(r2_command)['string']
+            symbol_name = symbol["symbol_name"]
+            symbol_name_addr = symbol["symbol_name_addr"]
+            symbol_dest_addr = symbol["symbol_dest_addr"]
+            symbol_type = symbol["symbol_flag"]
+            add_symbol(symbol_name, symbol_name_addr, symbol_dest_addr, symbol_type)
 
         except Exception as err:
-            print("Exception: {}".format(err))
-            pass
-
-        # create functions
-        if symbol_name_string:
-            if symbol_flag in need_create_function:
-                r2_command = "fs functions; f {} @ 0x{:08X}".format(symbol_name_string, symbol_dest_address)
-                r2p.cmd(r2_command)
-                # TODO: Need find a way to disable warnning "af: Cannot find function at"
-                r2_command = "af {} 0x{:08X}".format(symbol_name_string, symbol_dest_address)
-                r2p.cmd(r2_command)
-
-            else:
-                r2_command = "fs symbols; f {} @ 0x{:08X}".format(symbol_name_string, symbol_dest_address)
-                r2p.cmd(r2_command)
-
-        # TODO: set other symbol labels
-        # Need find how to do it.
-        ea += symbol_interval
+            continue
 
     flags = r2p.cmdj("fsj")
     function_count = 0
