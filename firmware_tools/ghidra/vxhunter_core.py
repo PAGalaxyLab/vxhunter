@@ -47,8 +47,7 @@ vx_6_sym_types = [
 ]
 
 need_create_function = [
-    0x0500,
-    0x050000
+    0x05
 ]
 
 
@@ -66,6 +65,7 @@ class VxTarget(object):
         self.symbol_table_end = None
         self._string_table = []
         self._symbol_table = []
+        self.symbols =[]
         self.load_address = None
         self._firmware = firmware
         self._has_symbol = None
@@ -261,6 +261,7 @@ class VxTarget(object):
         for i in range(self.symbol_table_start, self.symbol_table_end, self._symbol_interval):
             symbol_name_addr = self._firmware[i + 4:i + 8]
             symbol_dest_addr = self._firmware[i + 8:i + 12]
+            symbol_flag = ord(self._firmware[i + self._symbol_interval - 2])
             if self.big_endian:
                 unpack_format = '>I'
             else:
@@ -273,6 +274,7 @@ class VxTarget(object):
                 'symbol_name_addr': symbol_name_addr,
                 'symbol_name_length': None,
                 'symbol_dest_addr': symbol_dest_addr,
+                'symbol_flag': symbol_flag,
                 'offset': i
             })
         # self.logger.debug("self._symbol_table: %s" % self._symbol_table)
@@ -617,6 +619,38 @@ class VxTarget(object):
         self._symbol_table = []
         self.load_address = None
         self._has_symbol = None
+
+    def get_string_from_firmware_by_offset(self, string_offset):
+        symbol_name = ""
+        while True:
+            if self._firmware[string_offset] != '\x00':
+                symbol_name += self._firmware[string_offset]
+                string_offset += 1
+
+            else:
+                break
+
+        return symbol_name
+
+    def get_symbols(self):
+        self.symbols = []
+        if self.load_address:
+            for symbol in self._symbol_table:
+                symbol_name_addr = symbol["symbol_name_addr"]
+                symbol_dest_addr = symbol["symbol_dest_addr"]
+                symbol_flag = symbol["symbol_flag"]
+                symbol_name_firmware_addr = symbol_name_addr - self.load_address
+                symbol_name = self.get_string_from_firmware_by_offset(symbol_name_firmware_addr)
+                self.symbols.append({
+                    "symbol_name": symbol_name,
+                    "symbol_name_addr": symbol_name_addr,
+                    "symbol_dest_addr": symbol_dest_addr,
+                    "symbol_flag": symbol_flag
+                })
+            return self.symbols
+
+        else:
+            return None
 
 
 def demangle_function(demangle_string):

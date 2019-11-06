@@ -91,6 +91,85 @@ vx_6_symtbl_dt.replaceAtOffset(0x12, vx_6_sym_enum, 1, "symType", "")
 vx_6_symtbl_dt.replaceAtOffset(0x13, byte_data_type, 1, "End", "")
 
 
+def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
+    symbol_name_address = toAddr(symbol_name_address)
+    symbol_address = toAddr(symbol_address)
+
+    # Get symbol_name
+    if getDataAt(symbol_name_address):
+        print("removeDataAt: %s" % symbol_name_address)
+        removeDataAt(symbol_name_address)
+
+    if getInstructionAt(symbol_address):
+        print("removeInstructionAt: %s" % symbol_address)
+        removeInstructionAt(symbol_address)
+
+    try:
+        symbol_name_string = createAsciiString(symbol_name_address).getValue()
+        print("symbol_name_string: %s" % symbol_name_string)
+
+    except CodeUnitInsertionException as err:
+        print("Got CodeUnitInsertionException: {}".format(err))
+        symbol_name_string = symbol_name
+
+    except:
+        return
+
+    # Demangle symName
+    try:
+        # Demangle symName
+        sym_demangled_name = None
+        if can_demangle:
+            try:
+                sym_demangled = demangler.demangle(symbol_name_string, True)
+
+                if not sym_demangled:
+                    # some mangled function name didn't start with mangled prefix
+                    sym_demangled = demangler.demangle(symbol_name_string, False)
+
+                if not sym_demangled:
+                    # Temp fix to handle _ prefix function name by remove _ prefix before demangle
+                    sym_demangled = demangler.demangle(symbol_name_string[1:], False)
+
+                if sym_demangled:
+                    sym_demangled_name = sym_demangled.getSignature(False)
+
+            except DemangledException as err:
+                sym_demangled_name = None
+
+            if sym_demangled_name:
+                print("sym_demangled_name: %s" % sym_demangled_name)
+
+        if symbol_name_string and (symbol_type in need_create_function):
+            print("Start disassemble function %s at address %s" % (symbol_name_string, symbol_address.toString()))
+            disassemble(symbol_address)
+            # TODO: find out why createFunction didn't set the function name.
+            function = createFunction(symbol_address, symbol_name_string)
+            # use createLabel to rename function for now.
+            createLabel(symbol_address, symbol_name_string, True)
+            if function and sym_demangled_name:
+                # Add demangled string to comment
+                codeUnit = listing.getCodeUnitAt(symbol_address)
+                codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
+                # Rename function
+                function_return, function_name, function_parameters = demangle_function(sym_demangled_name)
+                print("Demangled function name is: %s" % function_name)
+                print("Demangled function return is: %s" % function_return)
+                print("Demangled function parameters is: %s" % function_parameters)
+                function.setName(function_name, USER_DEFINED)
+                # Todo: Add parameters later
+        else:
+            createLabel(symbol_address, symbol_name_string, True)
+            if sym_demangled_name:
+                codeUnit = listing.getCodeUnitAt(symbol_address)
+                codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
+
+    except Exception as err:
+        print("Create function Failed: %s" % err)
+
+    except:
+        print("Create function Failed: Java error")
+
 
 try:
     vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
@@ -138,99 +217,18 @@ try:
             vx_symbol_array_data_type = ArrayDataType(dt, sym_length, dt.getLength())
             createData(symbol_table_start, vx_symbol_array_data_type)
 
-            # Rename functions
-            while ea < symbol_table_end:
-                symbol_name_string = None
-                offset = 4
-                symbol_flag = getInt(ea.add(symbol_interval - 4))
-                symbol_name_address = toAddr(getInt(ea.add(offset)))
-                symbol_dest_address = toAddr(getInt(ea.add(offset + 4)))
-                print("symbol_address: %s" % ea)
-                print("symbol_flag: %s" % symbol_flag)
-                print("symbol_name_address: %s" % symbol_name_address)
-                print("symbol_dest_address: %s" % symbol_dest_address)
-                if not symbol_dest_address:
-                    ea = ea.add(symbol_interval)
-                    continue
-
-                # Get symbol_name
-                if getDataAt(symbol_name_address):
-                    print("removeDataAt: %s" % symbol_name_address)
-                    removeDataAt(symbol_name_address)
-                if getInstructionAt(symbol_dest_address):
-                    print("removeInstructionAt: %s" % symbol_dest_address)
-                    removeInstructionAt(symbol_dest_address)
-
+            # Load symbols
+            symbols = target.get_symbols()
+            for symbol in symbols:
                 try:
-                    symbol_name_string = createAsciiString(symbol_name_address).getValue()
-                    print("symbol_name_string: %s" % symbol_name_string)
-                except CodeUnitInsertionException as err:
-                    # Todo: Need find a way to get subString
-                    print("Got CodeUnitInsertionException: {}".format(err))
-                    ea = ea.add(symbol_interval)
-                    continue
-
-                except:
-                    ea = ea.add(symbol_interval)
-                    continue
-
-                try:
-                    # Demangle symName
-                    sym_demangled_name = None
-                    if can_demangle:
-                        try:
-                            sym_demangled = demangler.demangle(symbol_name_string, True)
-
-                            if not sym_demangled:
-                                # some mangled function name didn't start with mangled prefix
-                                sym_demangled = demangler.demangle(symbol_name_string, False)
-
-                            if not sym_demangled:
-                                # Temp fix to handle _ prefix function name by remove _ prefix before demangle
-                                sym_demangled = demangler.demangle(symbol_name_string[1:], False)
-
-                            if sym_demangled:
-                                sym_demangled_name = sym_demangled.getSignature(False)
-
-                        except DemangledException as err:
-                            sym_demangled_name = None
-
-                        if sym_demangled_name:
-                            print("sym_demangled_name: %s" % sym_demangled_name)
-
-                    if symbol_name_string and (symbol_flag in need_create_function):
-                        print("Start disassemble function %s at address %s" % (symbol_name_string,
-                                                                               symbol_dest_address.toString()))
-                        disassemble(symbol_dest_address)
-                        # TODO: find out why createFunction didn't set the function name.
-                        function = createFunction(symbol_dest_address, symbol_name_string)
-                        # use createLabel to rename function for now.
-                        createLabel(symbol_dest_address, symbol_name_string, True)
-                        if function and sym_demangled_name:
-                            # Add demangled string to comment
-                            codeUnit = listing.getCodeUnitAt(symbol_dest_address)
-                            codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
-                            # Rename function
-                            function_return, function_name, function_parameters = demangle_function(sym_demangled_name)
-                            print("Demangled function name is: %s" % function_name)
-                            print("Demangled function return is: %s" % function_return)
-                            print("Demangled function parameters is: %s" % function_parameters)
-                            function.setName(function_name, USER_DEFINED)
-                            # Todo: Add parameters later
-                    else:
-                        createLabel(symbol_dest_address, symbol_name_string, True)
-                        if sym_demangled_name:
-                            codeUnit = listing.getCodeUnitAt(symbol_dest_address)
-                            codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
+                    symbol_name = symbol["symbol_name"]
+                    symbol_name_addr = symbol["symbol_name_addr"]
+                    symbol_dest_addr = symbol["symbol_dest_addr"]
+                    symbol_flag = symbol["symbol_flag"]
+                    add_symbol(symbol_name, symbol_name_addr, symbol_dest_addr, symbol_flag)
 
                 except Exception as err:
-                    print("Create function Failed: %s" % err)
-
-                except:
-                    print("Create function Failed: Java error")
-
-                print("keep going!")
-                ea = ea.add(symbol_interval)
+                    continue
 
         else:
             popup("Can't find symbols in binary")
