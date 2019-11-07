@@ -25,16 +25,6 @@ def is_vx_symbol_file(file_data, is_big_endian=True):
         return struct.unpack('<I', file_data[:4])[0] == len(file_data)
 
 
-def get_string(offset):
-    string = ""
-    while True:
-        if string_table[offset] != '\x00':
-            string += string_table[offset]
-            offset += 1
-        else:
-            break
-    return string
-
 def demangle_function(demangle_string):
     function_return = None
     function_parameters = None
@@ -108,6 +98,14 @@ def load_symbols(file_data, is_big_endian=True):
         print("symbol_name: %s" % symbol_name)
         symbol_address = struct.unpack(unpack_format, symbol_data[-4:])[0]
         symbol_list.append([flag, symbol_name, symbol_address])
+        # Find TP-Link device loading address with symbols
+        if "wrs_kernel_text_start" in symbol_name:
+            load_address = symbol_address
+            target_block = currentProgram.memory.blocks[0]
+            print("target_block: %s" % target_block)
+            address = toAddr(load_address)
+            print("address: %s" % address)
+            currentProgram.memory.moveBlock(target_block, address, TaskMonitor.DUMMY)
 
     # load symbols
     for symbol_data in symbol_list:
@@ -169,13 +167,8 @@ def load_symbols(file_data, is_big_endian=True):
 try:
     symbol_file = askFile("Open symbol file", "")
     symbol_file_data = file(symbol_file.absolutePath).read()
-    endian = currentProgram.domainFile.getMetadata()[u'Endian']
-    if endian == u'Big':
-        is_big_endian = True
-    else:
-        is_big_endian = False
-    if is_vx_symbol_file(symbol_file_data, is_big_endian=is_big_endian):
-        load_symbols(symbol_file_data, is_big_endian=is_big_endian)
+    if is_vx_symbol_file(symbol_file_data):
+        load_symbols(symbol_file_data)
 
 except Exception as err:
     print(err)
