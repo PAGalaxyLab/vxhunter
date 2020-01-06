@@ -749,6 +749,15 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
     return
 
 
+def get_r2_opened_file(r2_opened_file_data):
+    for opened_file in r2_opened_file_data:
+        if isinstance(opened_file, dict):
+            if opened_file["raised"] is True and not opened_file["uri"].lower().startswith("malloc"):
+                return opened_file["uri"]
+
+    return None
+
+
 if __name__ == '__main__':
     print("Running with python version: {}".format(sys.version))
     r2p = r2pipe.open()
@@ -773,8 +782,11 @@ if __name__ == '__main__':
         print("vx_version:{}".format(vx_version))
 
     # only use first file
-    opened_file_data = r2p.cmdj("oj*")[0]
-    firmware_path = opened_file_data['uri']
+    opened_file_data = r2p.cmdj("oj*")
+    firmware_path = get_r2_opened_file(opened_file_data)
+    if firmware_path is None:
+        print("Can't get firmware_path, exit.")
+        sys.exit()
     print("firmware_path: {}".format(firmware_path))
 
     firmware = open(firmware_path, 'rb').read()
