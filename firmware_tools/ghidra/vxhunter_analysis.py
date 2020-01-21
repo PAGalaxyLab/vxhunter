@@ -228,6 +228,10 @@ def analyze_symbols():
         print('{}\r\n'.format("-" * 60))
         return
 
+    if not is_address_in_current_program(sys_sym_tbl.getAddress()):
+        print('{}\r\n'.format("-" * 60))
+        return
+
     sys_sym_addr = toAddr(getInt(sys_sym_tbl.getAddress()))
     if sys_sym_addr.getOffset() == 0:
         print('{}\r\n'.format("-" * 60))
