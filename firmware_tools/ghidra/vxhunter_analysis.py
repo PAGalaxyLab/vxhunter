@@ -1,6 +1,7 @@
 from vxhunter_core import *
-from vxhunter_utility import *
-from ghidra.program.model.symbol.SourceType import USER_DEFINED
+from vxhunter_utility.function_analyzer import *
+from vxhunter_utility.symbol import *
+from ghidra.program.model.symbol import RefType, SourceType
 
 
 def analyze_bss():
@@ -171,7 +172,7 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
                 logger.debug("Demangled function name is: %s" % function_name)
                 logger.debug("Demangled function return is: %s" % function_return)
                 logger.debug("Demangled function parameters is: %s" % function_parameters)
-                function.setName(function_name, USER_DEFINED)
+                function.setName(function_name, SourceType.USER_DEFINED)
                 # Todo: Add parameters later
         else:
             createLabel(symbol_address, symbol_name_string, True)
@@ -224,10 +225,12 @@ def analyze_symbols():
         sys_sym_tbl = getSymbol('_sysSymTbl', currentProgram.getGlobalNamespace())
 
     if not sys_sym_tbl:
+        print('{}\r\n'.format("-" * 60))
         return
 
     sys_sym_addr = toAddr(getInt(sys_sym_tbl.getAddress()))
     if sys_sym_addr.getOffset() == 0:
+        print('{}\r\n'.format("-" * 60))
         return
 
     else:
@@ -284,38 +287,51 @@ def analyze_function_xref_by_symbol_get():
         logger.debug("parms_data.keys(): {}".format(parms_data.keys()))
         currentReferenceManager = currentProgram.getReferenceManager()
         for call_addr in parms_data:
-            call_parms = parms_data[call_addr]
-            logger.debug("call_parms: {}".format(call_parms))
-            if 'parm_2' not in call_parms['parms'].keys():
-                continue
+            try:
+                call_parms = parms_data[call_addr]
+                logger.debug("call_parms: {}".format(call_parms))
+                if 'parm_2' not in call_parms['parms'].keys():
+                    continue
 
-            searched_symbol_name_ptr = call_parms['parms']['parm_2']['parm_data']
-            if isinstance(searched_symbol_name_ptr, DataDB):
-                searched_symbol_name = searched_symbol_name_ptr.value
-                if isinstance(searched_symbol_name, GenericAddress):
-                    if is_address_in_current_program(searched_symbol_name):
-                        searched_symbol_name = getDataAt(searched_symbol_name)
-                to_function = getFunction(searched_symbol_name.value)
-                if to_function:
-                    ref_to = to_function.getEntryPoint()
-                    ref_from = call_parms['call_addr']
-                    currentReferenceManager.addMemoryReference(ref_from, ref_to, RefType.READ,
-                                                               SourceType.USER_DEFINED, 0)
-                    print("Add Reference for {}( {:#010x} ) function call at {:#010x} in {}( {:#010x} )".format(
-                        to_function,
-                        ref_to.offset,
-                        call_parms['call_addr'].offset,
-                        call_parms['refrence_function_name'],
-                        call_parms['refrence_function_addr'].offset
-                    )
-                    )
+                searched_symbol_name_ptr = call_parms['parms']['parm_2']['parm_data']
+                if isinstance(searched_symbol_name_ptr, DataDB):
+                    searched_symbol_name = searched_symbol_name_ptr.value
+                    if isinstance(searched_symbol_name, GenericAddress):
+                        if is_address_in_current_program(searched_symbol_name):
+                            searched_symbol_name = getDataAt(searched_symbol_name)
+                    logger.debug("type(searched_symbol_name): {}".format(type(searched_symbol_name)))
+                    logger.debug("searched_symbol_name: {}".format(searched_symbol_name))
+                    if isinstance(searched_symbol_name, unicode) is False:
+                        searched_symbol_name = searched_symbol_name.value
+                    print("Found symFindByName({}) call at {:#010x}".format(searched_symbol_name,
+                                                                      call_parms['call_addr'].offset))
 
-                logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, searched_symbol_name,
-                                                                         call_parms['call_addr'].offset,
-                                                                         call_parms['refrence_function_name'],
-                                                                         call_parms['refrence_function_addr'].offset
-                                                                         ))
+                    to_function = getFunction(searched_symbol_name)
 
+                    if to_function:
+                        ref_to = to_function.getEntryPoint()
+                        ref_from = call_parms['call_addr']
+                        currentReferenceManager.addMemoryReference(ref_from, ref_to, RefType.READ,
+                                                                   SourceType.USER_DEFINED, 0)
+                        print("Add Reference for {}( {:#010x} ) function call at {:#010x} in {}( {:#010x} )".format(
+                            to_function,
+                            ref_to.offset,
+                            call_parms['call_addr'].offset,
+                            call_parms['refrence_function_name'],
+                            call_parms['refrence_function_addr'].offset
+                        )
+                        )
+
+                    else:
+                        print("Can't find {} symbol in firmware".format(searched_symbol_name))
+
+                    logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, searched_symbol_name,
+                                                                             call_parms['call_addr'].offset,
+                                                                             call_parms['refrence_function_name'],
+                                                                             call_parms['refrence_function_addr'].offset
+                                                                             ))
+            except Exception as err:
+                print(err)
 
     else:
         print("Can't find {} function in firmware".format(target_function))

@@ -1,111 +1,14 @@
+# coding=utf-8
+from common import *
 from ghidra.app.decompiler import DecompInterface, DecompileOptions, DecompileResults
 from ghidra.program.model.pcode import HighParam, PcodeOp, PcodeOpAST
 from ghidra.program.model.address import GenericAddress
-from ghidra.app.util.demangler import DemangledException
-from ghidra.app.util.demangler.gnu import GnuDemangler
 from ghidra.program.database.code import DataDB
 
-from ghidra.program.model.util import CodeUnitInsertionException
-from ghidra.program.model.mem import *
-from ghidra.program.model.symbol import RefType, SourceType
-from ghidra.program.model.data import (
-    CharDataType,
-    UnsignedIntegerDataType,
-    IntegerDataType,
-    ShortDataType,
-    PointerDataType,
-    VoidDataType,
-    ByteDataType,
-    ArrayDataType,
-    StructureDataType
-)
-import struct
-import logging
-import time
 
 # The Python module that Ghidra directly launches is always called __main__.  If we import
 # everything from that module, this module will behave as if Ghidra directly launched it.
 from __main__ import *
-
-
-debug = False
-process_is_64bit = False
-
-# Init Structs
-ptr_data_type = PointerDataType()
-byte_data_type = ByteDataType()
-char_data_type = CharDataType()
-void_data_type = VoidDataType()
-unsigned_int_type = UnsignedIntegerDataType()
-short_data_type = ShortDataType()
-char_ptr_type = ptr_data_type.getPointer(char_data_type, 4)
-void_ptr_type = ptr_data_type.getPointer(void_data_type, 4)
-
-vx_5_symtbl_dt = StructureDataType("VX_5_SYMBOL_IN_TBL", 0x10)
-vx_5_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
-vx_5_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
-vx_5_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
-vx_5_symtbl_dt.replaceAtOffset(0x0c, short_data_type, 4, "symGroup", "")
-vx_5_symtbl_dt.replaceAtOffset(0x0e, byte_data_type, 1, "symType", "")
-vx_5_symtbl_dt.replaceAtOffset(0x0f, byte_data_type, 1, "End", "")
-
-vx_6_symtbl_dt = StructureDataType("VX_6_SYMBOL_IN_TBL", 0x14)
-vx_6_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
-vx_6_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
-vx_6_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
-vx_6_symtbl_dt.replaceAtOffset(0x0c, unsigned_int_type, 4, "symRef", "moduleId of module, or predefined SYMREF")
-vx_6_symtbl_dt.replaceAtOffset(0x10, short_data_type, 4, "symGroup", "")
-vx_6_symtbl_dt.replaceAtOffset(0x12, byte_data_type, 1, "symType", "")
-vx_6_symtbl_dt.replaceAtOffset(0x13, byte_data_type, 1, "End", "")
-
-vx_5_sys_symtab = StructureDataType("VX_5_SYSTEM_SYMBOL_TABLE", 0x3C)
-vx_5_sys_symtab.replaceAtOffset(0x00, void_ptr_type, 4, "objCore", "Pointer to object's class")
-vx_5_sys_symtab.replaceAtOffset(0x04, void_ptr_type, 4, "nameHashId", "Pointer to HASH_TBL")
-vx_5_sys_symtab.replaceAtOffset(0x08, char_data_type, 0x28, "symMutex", "symbol table mutual exclusion sem")
-vx_5_sys_symtab.replaceAtOffset(0x30, void_ptr_type, 4, "symPartId", "memory partition id for symbols")
-vx_5_sys_symtab.replaceAtOffset(0x34, unsigned_int_type, 4, "sameNameOk", "symbol table name clash policy")
-vx_5_sys_symtab.replaceAtOffset(0x38, unsigned_int_type, 4, "PART_ID", "current number of symbols in table")
-
-
-vx_5_hash_tbl = StructureDataType("VX_5_HASH_TABLE", 0x18)
-vx_5_hash_tbl.replaceAtOffset(0x00, void_ptr_type, 4, "objCore", "Pointer to object's class")
-vx_5_hash_tbl.replaceAtOffset(0x04, unsigned_int_type, 4, "elements", "Number of elements in table")
-vx_5_hash_tbl.replaceAtOffset(0x08, void_ptr_type, 4, "keyCmpRtn", "Comparator function")
-vx_5_hash_tbl.replaceAtOffset(0x0c, void_ptr_type, 4, "keyRtn", "Pointer to object's class")
-vx_5_hash_tbl.replaceAtOffset(0x10, unsigned_int_type, 4, "keyArg", "Hash function argument")
-vx_5_hash_tbl.replaceAtOffset(0x14, void_ptr_type, 4, "*pHashTbl", "Pointer to hash table array")
-
-vx_5_sl_list = StructureDataType("VX_5_HASH_TABLE_LIST", 0x08)
-vx_5_sl_list.replaceAtOffset(0x00, void_ptr_type, 4, "head", "header of list")
-vx_5_sl_list.replaceAtOffset(0x04, void_ptr_type, 4, "tail", "tail of list")
-
-
-# Init Default Logger
-logger = logging.getLogger('Default_logger')
-logger.setLevel(logging.INFO)
-console_handler = logging.StreamHandler()
-console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
-console_handler.setFormatter(console_format)
-logger.addHandler(console_handler)
-
-if debug:
-    logger.setLevel(logging.DEBUG)
-
-endian = currentProgram.domainFile.getMetadata()[u'Endian']
-if endian == u'Big':
-    is_big_endian = True
-else:
-    is_big_endian = False
-
-
-process_type = currentProgram.domainFile.getMetadata()[u'Processor']
-if process_type.endswith(u'64'):
-    process_is_64bit = True
-
-
-demangler = GnuDemangler()
-listing = currentProgram.getListing()
-can_demangle = demangler.canDemangle(currentProgram)
 
 
 vxworks_service_keyword = {
@@ -122,32 +25,6 @@ vxworks_service_keyword = {
 decompile_function_cache = {
 
 }
-
-
-def is_address_in_current_program(address):
-    for block in currentProgram.memory.blocks:
-        if block.getStart().offset <= address.offset <= block.getEnd().offset:
-            return True
-    return False
-
-
-def get_signed_value(input_data):
-    pack_format = ""
-    if is_big_endian:
-        pack_format += ">"
-    else:
-        pack_format += "<"
-
-    if process_is_64bit:
-        pack_format += "L"
-    else:
-        pack_format += "I"
-
-    logger.debug("type(input_data): {}".format(type(input_data)))
-    data = struct.pack(pack_format.upper(), input_data)
-    signed_data = struct.unpack(pack_format.lower(), data)[0]
-
-    return signed_data
 
 
 class FlowNode(object):
@@ -482,6 +359,7 @@ def dump_call_parm_value(call_address, search_functions=None):
             function_address = function.getEntryPoint()
             if function_address in decompile_function_cache:
                 target = decompile_function_cache[function_address]
+
             else:
                 target = FunctionAnalyzer(function=function)
                 decompile_function_cache[function_address] = target
