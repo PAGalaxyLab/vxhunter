@@ -1,6 +1,7 @@
 from vxhunter_core import *
 from vxhunter_utility.function_analyzer import *
 from vxhunter_utility.symbol import *
+from vxhunter_utility.common import create_uninitialized_block
 from ghidra.program.model.symbol import RefType, SourceType
 
 
@@ -27,9 +28,12 @@ def analyze_bss():
             print("bss_end_address: {}".format(hex(bss_start_address + bss_length - 1)))
             print("bss_length: {}".format(hex(bss_length)))
             if not is_address_in_current_program(toAddr(bss_start_address)):
-                print("bss block not in current program, you should add it manually")
-                # TODO: automatic create bss block, after find out how createBlock function work.
-                # createBlock("bss", toAddr(bss_start_address), bss_length)
+                print("bss block not in current program, adding...")
+                if create_initialized_block(block_name=".bss", start_address=toAddr(bss_start_address),
+                                            length=bss_length):
+                    print("bss block created")
+                else:
+                    print("Can't create bss block, you can create it manually")
 
     else:
         print("Can't find bzero function in firmware")

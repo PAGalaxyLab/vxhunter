@@ -1,7 +1,8 @@
 # coding=utf-8
 from ghidra.app.util.demangler import DemangledException
 from ghidra.app.util.demangler.gnu import GnuDemangler
-from ghidra.program.model.mem import *
+from ghidra.program.model.mem import Memory
+from ghidra.util.task import TaskMonitor
 import struct
 import logging
 import time
@@ -106,3 +107,27 @@ def demangle_function(demangle_string):
     # get function return
     function_return = demangle_string[:function_name_start]
     return function_return, function_name, function_parameters
+
+
+def create_uninitialized_block(block_name, start_address, length, overlay=False):
+    # createUninitializedBlock
+
+    try:
+        memory = currentProgram.memory
+        memory.createUninitializedBlock(block_name, start_address, length, overlay)
+        return True
+
+    except:
+        return False
+
+
+def create_initialized_block(block_name, start_address, length, fill=0x00, monitor=TaskMonitor.DUMMY, overlay=False):
+    # createUninitializedBlock
+
+    try:
+        memory = currentProgram.memory
+        memory.createInitializedBlock(block_name, start_address, length, fill, monitor, overlay)
+        return True
+
+    except:
+        return False
