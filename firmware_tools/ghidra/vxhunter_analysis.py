@@ -1,7 +1,7 @@
 from vxhunter_core import *
 from vxhunter_utility.function_analyzer import *
 from vxhunter_utility.symbol import *
-from vxhunter_utility.common import create_uninitialized_block
+from vxhunter_utility.common import create_initialized_block
 from ghidra.program.model.symbol import RefType, SourceType
 
 
