@@ -233,6 +233,12 @@ def analyze_symbols():
         return
 
     sys_sym_addr = toAddr(getInt(sys_sym_tbl.getAddress()))
+
+    if not is_address_in_current_program(sys_sym_addr):
+        print("sys_sym_addr({:#010x}) is not in current_program".format(sys_sym_addr.getOffset()))
+        print('{}\r\n'.format("-" * 60))
+        return
+
     if sys_sym_addr.getOffset() == 0:
         print('{}\r\n'.format("-" * 60))
         return
