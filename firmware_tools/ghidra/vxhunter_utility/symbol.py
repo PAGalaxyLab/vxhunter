@@ -175,10 +175,14 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
         if symbol_name_string and (symbol_type in need_create_function):
             print("Start disassemble function %s at address %s" % (symbol_name_string, symbol_address.toString()))
             disassemble(symbol_address)
-            # TODO: find out why createFunction didn't set the function name.
             function = createFunction(symbol_address, symbol_name_string)
-            # use createLabel to rename function for now.
-            createLabel(symbol_address, symbol_name_string, True)
+            if function:
+                function.setName(symbol_name_string, SourceType.USER_DEFINED)
+
+            else:
+                # Add original symbol name
+                createLabel(symbol_address, symbol_name_string, True)
+
             if function and sym_demangled_name:
                 # Add demangled string to comment
                 codeUnit = listing.getCodeUnitAt(symbol_address)
@@ -190,6 +194,9 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
                 print("Demangled function parameters is: %s" % function_parameters)
                 function.setName(function_name, SourceType.USER_DEFINED)
                 # Todo: Add parameters later
+                # Add original symbol name
+                createLabel(symbol_address, symbol_name_string, True)
+
         else:
             createLabel(symbol_address, symbol_name_string, True)
             if sym_demangled_name:
