@@ -125,7 +125,8 @@ vx_5_sl_list.replaceAtOffset(0x04, void_ptr_type, 4, "tail", "tail of list")
 
 function_name_chaset = string.letters
 function_name_chaset += string.digits
-function_name_chaset += "_:.<>,*"
+function_name_chaset += "_:.<>,*"  # For C++
+function_name_chaset += "()~+-=/%"  # For C++ special eg operator+(ZafBignumData const &,long)
 ghidra_builtin_types = [
     'undefined',
     'byte',
@@ -252,7 +253,10 @@ def demangle_function(demangle_string):
                 index -= 1
 
         elif index == 0:
-            temp_data = demangle_string[index:function_name_end]
+            if demangle_string[function_name_end] == " ":
+                temp_data = demangle_string[index:function_name_end]
+            else:
+                temp_data = demangle_string[index:function_name_end + 1]
             if check_is_func_name(temp_data):
                 function_name = temp_data
             break
