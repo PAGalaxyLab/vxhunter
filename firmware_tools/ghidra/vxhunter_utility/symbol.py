@@ -14,6 +14,7 @@ from ghidra.program.model.data import (
 )
 from ghidra.program.model.symbol import RefType, SourceType
 from common import *
+import string
 
 
 # The Python module that Ghidra directly launches is always called __main__.  If we import
@@ -122,6 +123,153 @@ vx_5_sl_list.replaceAtOffset(0x00, void_ptr_type, 4, "head", "header of list")
 vx_5_sl_list.replaceAtOffset(0x04, void_ptr_type, 4, "tail", "tail of list")
 
 
+function_name_chaset = string.letters
+function_name_chaset += string.digits
+function_name_chaset += "_:.<>,*"
+ghidra_builtin_types = [
+    'undefined',
+    'byte',
+    'uint',
+    'ushort',
+    'bool',
+    'complex16',
+    'complex32',
+    'complex8',
+    'doublecomplex',
+    'dwfenc',
+    'dword',
+    'filetime',
+    'float10',
+    'float16',
+    'float2',
+    'float4',
+    'float8',
+    'floatcomplex',
+    'guid',
+    'imagebaseoffset32',
+    'imagebaseoffset64',
+    'int16',
+    'int3',
+    'int5',
+    'int6',
+    'int7',
+    'long',
+    'longdouble',
+    'longdoublecomplex',
+    'longlong',
+    'mactime',
+    'prel31',
+    'qword',
+    'sbyte',
+    'schar',
+    'sdword',
+    'segmentedcodeaddress',
+    'shiftedaddress',
+    'sqword',
+    'sword',
+    'wchar16',
+    'wchar32',
+    'uchar',
+    'uint16',
+    'uint3',
+    'uint5',
+    'uint6',
+    'uint7',
+    'ulong',
+    'ulonglong',
+    'undefined1',
+    'undefined2',
+    'undefined3',
+    'undefined4',
+    'undefined5',
+    'undefined6',
+    'undefined7',
+    'undefined8',
+    'wchar_t',
+    'word'
+]
+
+
+def check_is_func_name(function_name):
+    """ Check target string is match function name format.
+
+    :param function_name: string to check.
+    :return: True if string is match function name format, False otherwise.
+    """
+    # function name length should less than 512 byte
+    if len(function_name) > 512:
+        return False
+
+    for c in function_name:
+        if (c in function_name_chaset) is False:
+            return False
+
+    if function_name.lower() in ghidra_builtin_types:
+        return False
+
+    return True
+
+
+def demangle_function(demangle_string):
+    function_name = None
+    function_return = None
+    function_parameters = None
+    function_name_end = len(demangle_string)
+
+    # get parameters
+    index = len(demangle_string) - 1
+    if demangle_string[-1] == ')':
+        # have parameters
+        parentheses_count = 0
+        while index >= 0:
+            if demangle_string[index] == ')':
+                parentheses_count += 1
+
+            elif demangle_string[index] == '(':
+                parentheses_count -= 1
+
+            index -= 1
+
+            if parentheses_count == 0:
+                break
+
+        function_name_end = index
+
+    # get function name
+    while index >= 0:
+        if demangle_string[index] == ' ':
+            temp_data = demangle_string[index + 1:function_name_end + 1]
+            if temp_data == "*":
+                function_name_end = index
+                index -= 1
+
+            elif check_is_func_name(temp_data):
+                function_name = temp_data
+                break
+
+            else:
+                function_name_end = index
+                index -= 1
+
+        elif index == 0:
+            temp_data = demangle_string[index:function_name_end]
+            if check_is_func_name(temp_data):
+                function_name = temp_data
+            break
+
+        else:
+            index -= 1
+
+    function_name_start = index
+    function_parameters = demangle_string[function_name_end + 1:]
+
+    if index != 0:
+        # get function return
+        function_return = demangle_string[:function_name_start]
+
+    return function_return, function_name, function_parameters
+
+
 def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
     symbol_address = toAddr(symbol_address)
     symbol_name_string = symbol_name
@@ -192,8 +340,9 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
                 print("Demangled function name is: %s" % function_name)
                 print("Demangled function return is: %s" % function_return)
                 print("Demangled function parameters is: %s" % function_parameters)
-                function.setName(function_name, SourceType.USER_DEFINED)
-                # Todo: Add parameters later
+                if function_name:
+                    function.setName(function_name, SourceType.USER_DEFINED)
+                    # Todo: Add parameters later
                 # Add original symbol name
                 createLabel(symbol_address, symbol_name_string, True)
 

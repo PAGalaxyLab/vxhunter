@@ -70,45 +70,6 @@ def get_signed_value(input_data):
     return signed_data
 
 
-def demangle_function(demangle_string):
-    function_return = None
-    function_parameters = None
-    function_name_end = len(demangle_string)
-
-    # get parameters
-    index = len(demangle_string) - 1
-    if demangle_string[-1] == ')':
-        # have parameters
-        parentheses_count = 0
-        while index >= 0:
-            if demangle_string[index] == ')':
-                parentheses_count += 1
-
-            elif demangle_string[index] == '(':
-                parentheses_count -= 1
-
-            index -= 1
-
-            if parentheses_count == 0:
-                break
-
-        function_parameters = demangle_string[index + 2:-1]
-        function_name_end = index
-
-    # get function name
-    while index >= 0:
-        if demangle_string[index] == ' ':
-            break
-        else:
-            index -= 1
-    function_name_start = index
-    function_name = demangle_string[function_name_start + 1:function_name_end + 1]
-
-    # get function return
-    function_return = demangle_string[:function_name_start]
-    return function_return, function_name, function_parameters
-
-
 def create_uninitialized_block(block_name, start_address, length, overlay=False):
     # createUninitializedBlock
 
