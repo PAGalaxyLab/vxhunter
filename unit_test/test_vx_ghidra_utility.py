@@ -95,7 +95,7 @@ def demangle_function(demangle_string):
     function_name = None
     function_return = None
     function_parameters = None
-    function_name_end = len(demangle_string)
+    function_name_end = len(demangle_string) - 1
 
     # get parameters
     index = len(demangle_string) - 1
@@ -242,3 +242,10 @@ class VxHunterGhidraUtilityTests(BaseTestCase):
         self.assertEqual("undefined", function_return)
         self.assertEqual("basic_string<char,string_char_traits<char>,__default_alloc_template<true,0>>::operator", function_name)
         self.assertEqual("[](unsigned int)", function_parameters)
+
+    def test_demangle_function_13(self):
+        demangle_sting = "___tf36CServiceRequestSerialPollActiveState"
+        function_return, function_name, function_parameters = demangle_function(demangle_sting)
+        self.assertEqual(None, function_return)
+        self.assertEqual("___tf36CServiceRequestSerialPollActiveState", function_name)
+        self.assertEqual("", function_parameters)
