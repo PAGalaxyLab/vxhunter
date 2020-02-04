@@ -252,34 +252,36 @@ class VxAnalyzer(object):
 
     def analyze_netpool(self):
         print('{:-^60}'.format('analyze netpool'))
-        a = ["_pNetDpool", "_pNetPoolFuncTbl", "_pNetSysPool"]
-        net_dpool = get_symbol('_pNetDpool')
-        net_dpool_addr = toAddr(getInt(net_dpool.getAddress()))
+        pools = ["_pNetDpool", "_pNetSysPool"]
+        for pool in pools:
+            print('{:-^20}'.format(pool))
+            net_dpool = get_symbol(pool)
+            net_dpool_addr = toAddr(getInt(net_dpool.getAddress()))
 
-        if not is_address_in_current_program(net_dpool_addr):
-            print("net_dpool_addr({:#010x}) is not in current_program".format(net_dpool_addr.getOffset()))
+            if not is_address_in_current_program(net_dpool_addr):
+                print("{}({:#010x}) is not in current_program".format(pool, net_dpool_addr.getOffset()))
 
-        elif net_dpool_addr.getOffset() == 0:
-            pass
+            elif net_dpool_addr.getOffset() == 0:
+                pass
 
-        print("Found net_dpool_addr at {:#010x}".format(net_dpool_addr.getOffset()))
+            print("Found {} at {:#010x}".format(pool, net_dpool_addr.getOffset()))
 
-        try:
-            if not self._vx_version:
-                vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
+            try:
+                if not self._vx_version:
+                    vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
 
-                if vx_version == u"5.x":
-                    self._vx_version = 5
+                    if vx_version == u"5.x":
+                        self._vx_version = 5
 
-                elif vx_version == u"6.x":
-                    self._vx_version = 6
-                    print("VxHunter didn't support netpool analyze for VxWorks version 6.x")
+                    elif vx_version == u"6.x":
+                        self._vx_version = 6
+                        print("VxHunter didn't support netpool analyze for VxWorks version 6.x")
 
-            if self._vx_version == 5:
-                fix_netpool(net_dpool_addr, 5)
+                if self._vx_version == 5:
+                    fix_netpool(net_dpool_addr, 5)
 
-        except Exception as err:
-            print(err)
+            except Exception as err:
+                print(err)
 
         print('{}\r\n'.format("-" * 60))
 
