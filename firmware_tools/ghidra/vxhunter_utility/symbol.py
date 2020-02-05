@@ -422,11 +422,11 @@ def fix_netpool(netpool_addr, vx_version=5):
     if vx_version == 5:
         create_struct(netpool_addr, vx_5_net_pool)
         pool_table_addr = netpool_addr.add(0x24)
-        print("Found ClPool table at {:#010x}".format(pool_table_addr.getOffset()))
+        logger.info("Found ClPool table at {:#010x}".format(pool_table_addr.getOffset()))
         pool_status_ptr = netpool_addr.add(0x50)
-        print("Found PoolStat at {:#010x}".format(pool_status_ptr.getOffset()))
+        logger.info("Found PoolStat at {:#010x}".format(pool_status_ptr.getOffset()))
         pool_function_tbl_prt = netpool_addr.add(0x54)
-        print("Found pFuncTbl at {:#010x}".format(pool_function_tbl_prt.getOffset()))
+        logger.info("Found pFuncTbl at {:#010x}".format(pool_function_tbl_prt.getOffset()))
 
         for i in range(VX_5_CL_TBL_SIZE):
             offset = i * 0x04
