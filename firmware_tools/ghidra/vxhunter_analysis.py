@@ -23,9 +23,7 @@ class VxAnalyzer(object):
     def analyze_bss(self):
         self.report.append('{:-^60}'.format('analyze bss info'))
         self.logger.info("Start analyze bss info")
-        target_function = getFunction("bzero")
-        if not target_function:
-            target_function = getFunction("_bzero")
+        target_function = get_function("bzero")
         if target_function:
             parms_data = dump_call_parm_value(call_address=target_function.getEntryPoint(), search_functions=['sysStart',
                                                                                                               'usrInit',
@@ -63,9 +61,7 @@ class VxAnalyzer(object):
         hard_coded_accounts = {}
         self.logger.info("analyze loginUserAdd function")
         self.report.append("{:-^60}".format("analyze loginUserAdd function"))
-        target_function = getFunction("loginUserAdd")
-        if not target_function:
-            target_function = getFunction("_loginUserAdd")
+        target_function = get_function("loginUserAdd")
         if target_function:
             parms_data = dump_call_parm_value(target_function.getEntryPoint())
             for call_addr in parms_data:
@@ -125,9 +121,7 @@ class VxAnalyzer(object):
         for service in sorted(vxworks_service_keyword.keys()):
             service_status[service] = "Not available"
             for service_function in vxworks_service_keyword[service]:
-                target_function = getFunction(service_function)
-                if not target_function:
-                    target_function = getFunction("_{}".format(service_function))
+                target_function = get_function(service_function)
                 if target_function:
                     # print("Found {} in firmware, service {} might available".format(service_function, service))
                     service_status[service] = "available"
@@ -212,10 +206,7 @@ class VxAnalyzer(object):
         self.report.append('{:-^60}'.format('analyze symFindByName function call'))
 
         # symFindByName analyze
-        target_function = getFunction("symFindByName")
-
-        if not target_function:
-            target_function = getFunction("_symFindByName")
+        target_function = get_function("symFindByName")
 
         if target_function:
             parms_data = dump_call_parm_value(call_address=target_function.getEntryPoint())
@@ -244,7 +235,7 @@ class VxAnalyzer(object):
                         self.report.append("Found symFindByName({}) call at {:#010x}".format(
                             searched_symbol_name, call_parms['call_addr'].offset))
 
-                        to_function = getFunction(searched_symbol_name)
+                        to_function = get_function(searched_symbol_name, None)
 
                         if to_function:
                             ref_to = to_function.getEntryPoint()

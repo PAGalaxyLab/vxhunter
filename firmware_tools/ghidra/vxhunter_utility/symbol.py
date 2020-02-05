@@ -324,6 +324,14 @@ def get_symbol(symbol_name, symbom_prefix="_"):
         return symbol
 
 
+def get_function(function_name, function_prefix="_"):
+    function = getFunction(function_name)
+    if not function and function_prefix:
+        function = getFunction("{}{}".format(function_prefix, function_name))
+
+    return function
+
+
 def fix_symbol_by_chains(head, tail, vx_version):
     symbol_interval = 0x10
     dt = vx_5_symtbl_dt
