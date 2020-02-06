@@ -315,9 +315,10 @@ class VxAnalyzer(object):
 
     def analyze_current_tcb(self):
         self.logger.info('analyze Current task')
-        self.report.append('{:-^60}'.format('analyze Current task'))
+        self.report.append('{:-^60}'.format('analyze task'))
         tid = get_symbol("taskIdCurrent")
         tcb_addr = toAddr(getInt(tid.getAddress()))
+        self.report.append("Task tcb address is {:#010x}".format(tcb_addr.getOffset()))
         tcb_info = fix_tcb(tcb_addr, self._vx_version)
         task_name = tcb_info["task_name"]
         self.report.append("Task name is {}".format(task_name))
