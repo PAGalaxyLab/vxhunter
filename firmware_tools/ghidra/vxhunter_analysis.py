@@ -313,6 +313,26 @@ class VxAnalyzer(object):
 
         self.report.append('{}\r\n'.format("-" * 60))
 
+    def analyze_current_tcb(self):
+        self.logger.info('analyze Current task')
+        self.report.append('{:-^60}'.format('analyze Current task'))
+        tid = get_symbol("taskIdCurrent")
+        tcb_addr = toAddr(getInt(tid.getAddress()))
+        tcb_info = fix_tcb(tcb_addr, self._vx_version)
+        task_name = tcb_info["task_name"]
+        self.report.append("Task name is {}".format(task_name))
+        task_entry_addr = tcb_info["task_entry_addr"]
+        self.report.append("Task entry addr is {:#010x}".format(task_entry_addr))
+        task_entry_name = tcb_info["task_entry_name"]
+        self.report.append("Task entry name is {}".format(task_entry_name))
+        task_stack_base = tcb_info["task_stack_base"]
+        self.report.append("Task stack_base is {:#010x}".format(task_stack_base))
+        task_stack_limit = tcb_info["task_stack_limit"]
+        self.report.append("Task stack_limit is {:#010x}".format(task_stack_limit))
+        task_stack_limit_end = tcb_info["task_stack_limit_end"]
+        self.report.append("Task stack limit end is {:#010x}".format(task_stack_limit_end))
+        self.report.append('{}\r\n'.format("-" * 60))
+
     def print_report(self):
         for line in self.report:
             print(line)
@@ -324,6 +344,7 @@ class VxAnalyzer(object):
         self.analyze_symbols()
         self.analyze_netpool()
         self.analyze_function_xref_by_symbol_get()
+        self.analyze_current_tcb()
 
 
 if __name__ == '__main__':

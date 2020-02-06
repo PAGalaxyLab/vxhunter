@@ -7,6 +7,7 @@ from ghidra.program.model.data import (
     Integer16DataType,
     UnsignedLongDataType,
     ShortDataType,
+    UnsignedShortDataType,
     PointerDataType,
     VoidDataType,
     ByteDataType,
@@ -27,6 +28,7 @@ int_type = IntegerDataType()
 int16_type = Integer16DataType()
 unsigned_long_type = UnsignedLongDataType()
 short_data_type = ShortDataType()
+unsigned_short_data_type = UnsignedShortDataType()
 char_ptr_type = ptr_data_type.getPointer(char_data_type, 4)
 void_ptr_type = ptr_data_type.getPointer(void_data_type, 4)
 
@@ -342,7 +344,7 @@ vx_5_wind_tcb.replaceAtOffset(0x10, vx_5_q_node, vx_5_q_node.getLength(), "tickN
 vx_5_wind_tcb.replaceAtOffset(0x20, vx_5_q_node, vx_5_q_node.getLength(), "activeNode", "0x20: multiway q node: active q")
 vx_5_wind_tcb.replaceAtOffset(0x30, vx_5_obj_core, vx_5_obj_core.getLength(), "objCore", "0x30: object management")
 vx_5_wind_tcb.replaceAtOffset(0x34, void_ptr_type, 4, "name", "0x34: pointer to task name")
-vx_5_wind_tcb.replaceAtOffset(0x34, int_type, 4, "options", "0x38: task option bits")
+vx_5_wind_tcb.replaceAtOffset(0x38, unsigned_int_type, 4, "options", "0x38: task option bits")
 vx_5_wind_tcb.replaceAtOffset(0x3C, unsigned_int_type, 4, "status", "0x3c: status of task")
 vx_5_wind_tcb.replaceAtOffset(0x40, unsigned_int_type, 4, "priority", "0x40: task's current priority")
 vx_5_wind_tcb.replaceAtOffset(0x44, unsigned_int_type, 4, "priNormal", "0x44: task's normal priority")
@@ -350,8 +352,8 @@ vx_5_wind_tcb.replaceAtOffset(0x48, unsigned_int_type, 4, "priMutexCnt", "0x48: 
 vx_5_wind_tcb.replaceAtOffset(0x4C, void_ptr_type, 4, "pPriMutex", "0x4c: pointer to inheritance mutex")
 vx_5_wind_tcb.replaceAtOffset(0x50, unsigned_int_type, 4, "lockCnt", "0x50: preemption lock count")
 vx_5_wind_tcb.replaceAtOffset(0x54, unsigned_int_type, 4, "tslice", "0x54: current count of time slice")
-vx_5_wind_tcb.replaceAtOffset(0x58, unsigned_int16_type, 2, "swapInMask", "0x58: task's switch in hooks")
-vx_5_wind_tcb.replaceAtOffset(0x5a, unsigned_int16_type, 2, "swapOutMask", "0x5a: task's switch out hooks")
+vx_5_wind_tcb.replaceAtOffset(0x58, unsigned_short_data_type, 2, "swapInMask", "0x58: task's switch in hooks")
+vx_5_wind_tcb.replaceAtOffset(0x5a, unsigned_short_data_type, 2, "swapOutMask", "0x5a: task's switch out hooks")
 vx_5_wind_tcb.replaceAtOffset(0x5c, void_ptr_type, 4, "pPendQ", "0x5c: q head pended on (if any)")
 vx_5_wind_tcb.replaceAtOffset(0x60, unsigned_int_type, 4, "safeCnt", "0x60: safe-from-delete count")
 vx_5_wind_tcb.replaceAtOffset(0x64, vx_5_q_head, vx_5_q_head.getLength(), "safetyQHead", "0x64: safe-from-delete q head")

@@ -443,3 +443,42 @@ def fix_netpool(netpool_addr, vx_version=5):
 
         create_struct(toAddr(getInt(pool_status_ptr)), vx_5_pool_stat)
         fix_pool_func_tbl(toAddr(getInt(pool_function_tbl_prt)), vx_version)
+
+
+def fix_tcb(tcb_addr, vx_version=5):
+    tcb_info = {
+        "tcb_addr": tcb_addr.getOffset(),
+        "task_name": None,
+        "task_entry_addr": None,
+        "task_entry_name": None,
+        "task_stack_base": None,
+        "task_stack_limit": None,
+        "task_stack_limit_end": None,
+    }
+    if vx_version == 5:
+        create_struct(tcb_addr, vx_5_wind_tcb)
+        task_name_ptr = tcb_addr.add(0x34)
+        task_name_addr = toAddr(getInt(task_name_ptr))
+        task_name = getDataAt(task_name_addr)
+        logger.info("Task name is {}".format(task_name))
+        tcb_info["task_name"] = task_name
+        task_entry_ptr = tcb_addr.add(0x74)
+        task_entry_addr = toAddr(getInt(task_entry_ptr))
+        tcb_info["task_entry_addr"] = task_entry_addr.getOffset()
+        logger.info("Task entry addr is {:#010x}".format(task_entry_addr.getOffset()))
+        task_entry_name = getFunctionAt(task_entry_addr)
+        tcb_info["task_entry_name"] = task_entry_name
+        logger.info("Task entry name is {}".format(task_entry_name))
+        task_stack_base_ptr = tcb_addr.add(0x78)
+        task_stack_base = toAddr(getInt(task_stack_base_ptr))
+        tcb_info["task_stack_base"] = task_stack_base.getOffset()
+        logger.info("Task stack_base is {:#010x}".format(task_stack_base.getOffset()))
+        task_stack_limit_ptr = tcb_addr.add(0x7c)
+        task_stack_limit = toAddr(getInt(task_stack_limit_ptr))
+        tcb_info["task_stack_limit"] = task_stack_limit.getOffset()
+        logger.info("Task stack_limit is {:#010x}".format(task_stack_limit.getOffset()))
+        task_stack_limit_end_ptr = tcb_addr.add(0x80)
+        task_stack_limit_end = toAddr(getInt(task_stack_limit_end_ptr))
+        tcb_info["task_stack_limit_end"] = task_stack_limit_end.getOffset()
+        logger.info("Task stack limit end is {:#010x}".format(task_stack_limit_end.getOffset()))
+        return tcb_info
