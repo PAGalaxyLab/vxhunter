@@ -391,6 +391,15 @@ def fix_cl_buff_chain(cl_buff_addr, vx_version=5):
 
 
 def fix_clpool(clpool_addr, vx_version=5):
+    cl_pool_info = {
+        "cl_pool_addr": clpool_addr.getOffset(),
+        "cl_pool_size": None,
+        "cl_pool_num": None,
+        "cl_pool_num_free": None,
+        "cl_pool_usage": None,
+        "cl_head_addr": None,
+
+    }
     if vx_version == 5:
         if clpool_addr.offset == 0:
             return
@@ -398,7 +407,13 @@ def fix_clpool(clpool_addr, vx_version=5):
         if is_address_in_current_program(clpool_addr):
             create_struct(clpool_addr, vx_5_clPool)
             cl_head_addr = toAddr(getInt(clpool_addr.add(0x14)))
+            cl_pool_info["cl_pool_size"] = getInt(clpool_addr.add(0x00))
+            cl_pool_info["cl_pool_num"] = getInt(clpool_addr.add(0x08))
+            cl_pool_info["cl_pool_num_free"] = getInt(clpool_addr.add(0x0c))
+            cl_pool_info["cl_pool_usage"] = getInt(clpool_addr.add(0x10))
+            cl_pool_info["cl_head_addr"] = cl_head_addr.getOffset()
             fix_cl_buff_chain(cl_head_addr)
+            return cl_pool_info
 
 
 def fix_pool_func_tbl(pool_func_addr, vx_version=5):
@@ -427,22 +442,36 @@ def fix_pool_func_tbl(pool_func_addr, vx_version=5):
 
 
 def fix_netpool(netpool_addr, vx_version=5):
+    net_pool_info = {
+        "pool_addr": netpool_addr.getOffset(),
+        "pool_table_addr": None,
+        "pool_status_addr": None,
+        "pool_func_tbl_addr": None,
+        "cl_pool_info": [],
+    }
     if vx_version == 5:
         create_struct(netpool_addr, vx_5_net_pool)
         pool_table_addr = netpool_addr.add(0x24)
         logger.info("Found ClPool table at {:#010x}".format(pool_table_addr.getOffset()))
-        pool_status_ptr = netpool_addr.add(0x50)
-        logger.info("Found PoolStat at {:#010x}".format(pool_status_ptr.getOffset()))
-        pool_function_tbl_prt = netpool_addr.add(0x54)
-        logger.info("Found pFuncTbl at {:#010x}".format(pool_function_tbl_prt.getOffset()))
+        net_pool_info["pool_table_addr"] = pool_table_addr.getOffset()
+        pool_status_addr = toAddr(getInt(netpool_addr.add(0x50)))
+        logger.info("Found PoolStat at {:#010x}".format(pool_status_addr.getOffset()))
+        net_pool_info["pool_status_addr"] = pool_table_addr.getOffset()
+        pool_function_tbl_addr = toAddr(getInt(netpool_addr.add(0x54)))
+        logger.info("Found pFuncTbl at {:#010x}".format(pool_function_tbl_addr.getOffset()))
+        net_pool_info["pool_func_tbl_addr"] = pool_function_tbl_addr.getOffset()
 
         for i in range(VX_5_CL_TBL_SIZE):
             offset = i * 0x04
             cl_pool_addr = toAddr(getInt(pool_table_addr.add(offset)))
-            fix_clpool(cl_pool_addr, vx_version)
+            cl_pool_info = fix_clpool(cl_pool_addr, vx_version)
+            if cl_pool_info:
+                net_pool_info["cl_pool_info"].append(cl_pool_info)
 
-        create_struct(toAddr(getInt(pool_status_ptr)), vx_5_pool_stat)
-        fix_pool_func_tbl(toAddr(getInt(pool_function_tbl_prt)), vx_version)
+        create_struct(pool_status_addr, vx_5_pool_stat)
+        fix_pool_func_tbl(pool_function_tbl_addr, vx_version)
+
+    return net_pool_info
 
 
 def fix_tcb(tcb_addr, vx_version=5):

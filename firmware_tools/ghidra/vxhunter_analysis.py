@@ -3,6 +3,7 @@ from vxhunter_utility.function_analyzer import *
 from vxhunter_utility.symbol import *
 from vxhunter_utility.common import create_initialized_block
 from ghidra.program.model.symbol import RefType, SourceType
+import json
 
 
 class VxAnalyzer(object):
@@ -306,7 +307,30 @@ class VxAnalyzer(object):
                         self.report.append("VxHunter didn't support netpool analyze for VxWorks version 6.x")
 
                 if self._vx_version == 5:
-                    fix_netpool(net_dpool_addr, 5)
+                    net_pool_info = fix_netpool(net_dpool_addr, 5)
+                    pool_addr = net_pool_info["pool_addr"]
+                    pool_func_tbl_addr = net_pool_info["pool_func_tbl_addr"]
+                    pool_status_addr = net_pool_info["pool_status_addr"]
+                    pool_table_addr = net_pool_info["pool_table_addr"]
+                    self.report.append("Pool address: {:#010x}".format(pool_addr))
+                    self.report.append("Pool function table address: {:#010x}".format(pool_func_tbl_addr))
+                    self.report.append("Pool status address: {:#010x}".format(pool_status_addr))
+                    self.report.append("Pool table address: {:#010x}".format(pool_table_addr))
+                    cl_pool_count = 0
+                    for cl_pool_info in net_pool_info["cl_pool_info"]:
+                        cl_pool_addr = cl_pool_info["cl_pool_addr"]
+                        cl_pool_num = cl_pool_info["cl_pool_num"]
+                        cl_pool_num_free = cl_pool_info["cl_pool_num_free"]
+                        cl_pool_size = cl_pool_info["cl_pool_size"]
+                        cl_pool_usage = cl_pool_info["cl_pool_usage"]
+                        cl_head_addr = cl_pool_info["cl_head_addr"]
+                        cl_pool_name = "Clpool {}".format(cl_pool_count)
+                        self.report.append(('  {:-^20}'.format(cl_pool_name)))
+                        cl_pool_data = "  address: {:#010x} block head Address: {:#010x} "\
+                                       "buff size: {} numbers: {} free numbers: {} usage: {} ".format(
+                            cl_pool_addr, cl_head_addr, cl_pool_size, cl_pool_num, cl_pool_num_free, cl_pool_usage)
+                        self.report.append(cl_pool_data)
+                        cl_pool_count += 1
 
             except Exception as err:
                 self.logger.error(err)
