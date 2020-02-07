@@ -307,7 +307,7 @@ class VxAnalyzer(object):
                         self.report.append("VxHunter didn't support netpool analyze for VxWorks version 6.x")
 
                 if self._vx_version == 5:
-                    net_pool_info = fix_netpool(net_dpool_addr, 5)
+                    net_pool_info = fix_netpool(net_dpool_addr, self._vx_version)
                     pool_addr = net_pool_info["pool_addr"]
                     pool_func_tbl_addr = net_pool_info["pool_func_tbl_addr"]
                     pool_status_addr = net_pool_info["pool_status_addr"]
@@ -337,25 +337,40 @@ class VxAnalyzer(object):
 
         self.report.append('{}\r\n'.format("-" * 60))
 
-    def analyze_current_tcb(self):
-        self.logger.info('analyze Current task')
+    def analyze_active_task(self):
+        self.logger.info('analyze active task')
         self.report.append('{:-^60}'.format('analyze task'))
-        tid = get_symbol("taskIdCurrent")
-        tcb_addr = toAddr(getInt(tid.getAddress()))
-        self.report.append("Task tcb address is {:#010x}".format(tcb_addr.getOffset()))
-        tcb_info = fix_tcb(tcb_addr, self._vx_version)
-        task_name = tcb_info["task_name"]
-        self.report.append("Task name is {}".format(task_name))
-        task_entry_addr = tcb_info["task_entry_addr"]
-        self.report.append("Task entry addr is {:#010x}".format(task_entry_addr))
-        task_entry_name = tcb_info["task_entry_name"]
-        self.report.append("Task entry name is {}".format(task_entry_name))
-        task_stack_base = tcb_info["task_stack_base"]
-        self.report.append("Task stack_base is {:#010x}".format(task_stack_base))
-        task_stack_limit = tcb_info["task_stack_limit"]
-        self.report.append("Task stack_limit is {:#010x}".format(task_stack_limit))
-        task_stack_limit_end = tcb_info["task_stack_limit_end"]
-        self.report.append("Task stack limit end is {:#010x}".format(task_stack_limit_end))
+        active_qhead = get_symbol("activeQHead")
+        active_qhead_addr = active_qhead.getAddress()
+        create_struct(active_qhead_addr, vx_5_q_head)
+        active_task_head_ptr = active_qhead_addr.add(0x04)
+        active_task_head = toAddr(getInt(active_task_head_ptr))
+        tcb_addr = active_task_head.add(-0x20)
+        first_tcb_addr = tcb_addr
+
+        while True:
+            # TODO: Print task info pretty
+            tcb_info = fix_tcb(tcb_addr, self._vx_version)
+            task_name = tcb_info["task_name"]
+            task_entry_addr = tcb_info["task_entry_addr"]
+            task_entry_name = tcb_info["task_entry_name"]
+            task_stack_base = tcb_info["task_stack_base"]
+            task_stack_limit = tcb_info["task_stack_limit"]
+            task_stack_limit_end = tcb_info["task_stack_limit_end"]
+            task_info_data = "  Task name: {}  Entry: {}({:#010x})  tid: {:#010x}  " \
+                             "stack base: {:#010x}   stack limit {:#010x}   stack end {:#010x}".format(
+                task_name, task_entry_name, task_entry_addr, tcb_addr.getOffset(), task_stack_base,
+                task_stack_limit, task_stack_limit_end
+            )
+            self.report.append(task_info_data)
+            next_active_task_ptr = tcb_addr.add(0x24)
+            next_active_task = toAddr(getInt(next_active_task_ptr))
+            if next_active_task.getOffset() == 0:
+                break
+            tcb_addr = next_active_task.add(-0x20)
+            if tcb_addr == first_tcb_addr or is_address_in_current_program(tcb_addr) is False:
+                break
+
         self.report.append('{}\r\n'.format("-" * 60))
 
     def print_report(self):
@@ -369,7 +384,7 @@ class VxAnalyzer(object):
         self.analyze_symbols()
         self.analyze_netpool()
         self.analyze_function_xref_by_symbol_get()
-        self.analyze_current_tcb()
+        self.analyze_active_task()
 
 
 if __name__ == '__main__':
