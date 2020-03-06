@@ -1,9 +1,10 @@
 # coding=utf-8
-from vxhunter_core import *
-from vxhunter_utility.symbol import *
-from vxhunter_utility.common import *
-from ghidra.util.task import TaskMonitor
+from vxhunter_core import VxTarget
 
+from vxhunter_utility.common import *
+from vxhunter_utility.symbol import add_symbol, fix_symbol_table_structs
+
+from ghidra.util.task import TaskMonitor
 
 # For https://github.com/VDOO-Connected-Trust/ghidra-pyi-generator
 try:
@@ -11,7 +12,6 @@ try:
 
 except Exception as err:
     pass
-
 
 try:
     vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
@@ -36,9 +36,9 @@ try:
 
             # Rebase_image
             target_block = currentProgram.memory.blocks[0]
-            print("target_block: %s" % target_block)
+            print("target_block: {}".format(target_block))
             address = toAddr(load_address)
-            print("address: %s" % address)
+            print("address: {}".format(address))
             currentProgram.memory.moveBlock(target_block, address, TaskMonitor.DUMMY)
 
             # Create symbol table structs
