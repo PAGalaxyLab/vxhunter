@@ -92,8 +92,8 @@ class VxTarget(object):
             self._symbol_interval = 20
 
         if logger is None:
-            self.logger = logging.getLogger('target')
-            # FIXME
+            self.logger = logging.getLogger(__name__)
+            # FIXME: Log level
             self.logger.setLevel(logging.DEBUG)
             consolehandler = logging.StreamHandler()
             console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
@@ -251,18 +251,19 @@ class VxTarget(object):
                 check_data = self._firmware[i:i + self._symbol_interval]
 
                 if len(check_data) < self._symbol_interval:
-                    self.logger.debug("[CORE] Check_data length is too small: {}".format(check_data))
+                    self.logger.debug("check_data length is too small: {}".format(check_data))
                     break
 
                 if self._check_symbol_format_simple(check_data):
                     self.symbol_table_end = i + self._symbol_interval
-                    self.logger.debug("[CORE] self.symbol_table_end: {:010x}".format(self.symbol_table_end))
+                    # FIXME: Uncomment eventually
+                    # self.logger.debug("self.symbol_table_end: {:010x}".format(self.symbol_table_end))
 
                 else:
-                    self.logger.info("[CORE] symbol table end offset: {}".format(hex(self.symbol_table_end)))
+                    self.logger.info("Symbol table end offset: {}".format(hex(self.symbol_table_end)))
                     break
         else:
-            self.logger.error("didn't find symbol table in this image")
+            self.logger.error("Didn't find symbol table in this image")
             self._has_symbol = False
 
     def get_symbol_table(self):
@@ -285,9 +286,8 @@ class VxTarget(object):
             else:
                 unpack_format = '<I'
             symbol_name_addr = int(struct.unpack(unpack_format, symbol_name_addr)[0])
-            self.logger.debug("symbol_name_addr: {}".format(symbol_name_addr))
             symbol_dest_addr = int(struct.unpack(unpack_format, symbol_dest_addr)[0])
-            self.logger.debug("symbol_dest_addr: {}".format(symbol_dest_addr))
+            # self.logger.debug("symbol_name_addr: {}; symbol_dest_addr: {}".format(symbol_name_addr, symbol_dest_addr))
             self._symbol_table.append({
                 'symbol_name_addr': symbol_name_addr,
                 'symbol_name_length': None,
@@ -384,6 +384,7 @@ class VxTarget(object):
         :param key_offset: key function name offset in VxWorks image.
         :return:
         """
+        self.logger.debug("Attempting to find string table by key function index with offset {}".format(hex(key_offset)))
         temp_str_tab_data = []
         if len(self._symbol_table) > default_check_count:
             count = default_check_count
@@ -391,13 +392,14 @@ class VxTarget(object):
             count = len(self._symbol_table)
         start_offset = key_offset
         end_offset = key_offset
+        self.logger.debug("Initializing with start_offset = end_offset = {}".format(hex(key_offset)))
 
         while start_offset > 0:
             if self._is_printable(self._firmware[start_offset]) is True:
                 # get string from offset
                 string, start_address, end_address = self._get_prev_string_data(start_offset)
-                self.logger.debug(
-                    "string:%s, start_address:%s, end_address:%s" % (string, hex(start_address), hex(end_address)))
+                self.logger.debug("string: {}; start_address: {}; end_address: {}".format((string, hex(start_address),
+                                                                                           hex(end_address))))
                 # check string is function name
                 if self._check_is_func_name(string) is False:
                     if len(temp_str_tab_data) < count:
@@ -560,14 +562,17 @@ class VxTarget(object):
                 return None
         try:
             key_function_index = self._firmware.index('\x00' + function_name_key_words[0] + '\x00')
+            self.logger.debug("key_function_index: {}".format(key_function_index))
         except Exception as err:
             # Handler _ prefix symbols
+            self.logger.exception("Exception occurred while loading key_function_index: {}. Continuing...".format(err))
             key_function_index = self._firmware.index('\x00_' + function_name_key_words[0] + '\x00')
+            self.logger.debug("key_function_index: {}".format(key_function_index))
 
         str_start_address, str_end_address = self.find_string_table_by_key_function_index(key_function_index)
         self.get_string_table(str_start_address, str_end_address)
         # TODO: Need improve performance
-        self.logger.info("Starting analysis")
+        self.logger.info("Starting loading address analysis")
         for str_index in range(len(self._string_table)):
             for func_index in range(len(self._symbol_table)):
                 self.logger.debug("self._string_table[str_index]['length']: {}".format(self._string_table[str_index]['length']))
