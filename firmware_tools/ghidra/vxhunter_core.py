@@ -120,8 +120,7 @@ class VxTarget(object):
         :return:
         """
         data1 = self._firmware[self.symbol_table_start + 4:self.symbol_table_start + 4 + self._symbol_interval]
-        data2 = self._firmware[self.symbol_table_start + 4 + self._symbol_interval:self.symbol_table_start + 4 +
-                               self._symbol_interval * 2]
+        data2 = self._firmware[self.symbol_table_start + 4 + self._symbol_interval:self.symbol_table_start + 4 + self._symbol_interval * 2]
         if data1[0:2] == data2[0:2]:
             self.logger.info("VxWorks endian: Big endian.")
             self.big_endian = True
@@ -288,13 +287,7 @@ class VxTarget(object):
             symbol_name_addr = int(struct.unpack(unpack_format, symbol_name_addr)[0])
             symbol_dest_addr = int(struct.unpack(unpack_format, symbol_dest_addr)[0])
             # self.logger.debug("symbol_name_addr: {}; symbol_dest_addr: {}".format(symbol_name_addr, symbol_dest_addr))
-            self._symbol_table.append({
-                'symbol_name_addr': symbol_name_addr,
-                'symbol_name_length': None,
-                'symbol_dest_addr': symbol_dest_addr,
-                'symbol_flag': symbol_flag,
-                'offset': i
-            })
+            self._symbol_table.append({'symbol_name_addr': symbol_name_addr, 'symbol_name_length': None, 'symbol_dest_addr': symbol_dest_addr, 'symbol_flag': symbol_flag, 'offset': i})
         # self.logger.debug("self._symbol_table: %s" % self._symbol_table)
         self.logger.debug("len(self._symbol_table): {}".format(len(self._symbol_table)))
         self._symbol_table = sorted(self._symbol_table, key=lambda x: x['symbol_name_addr'])
@@ -311,7 +304,13 @@ class VxTarget(object):
         :param c: char to check.
         :return: True if char is printable, False otherwise.
         """
-        return 32 <= ord(c) <= 126
+        try:
+            # Not python 3 compatible
+            c.decode('ascii')
+            # return 32 <= ord(c) <= 126
+            return True
+        except UnicodeDecodeError:
+            return False
 
     # TODO: Performance of this can be improved
     def _check_is_func_name(self, string):
@@ -351,9 +350,11 @@ class VxTarget(object):
                         break
                     offset -= 1
                 data = self._firmware[start_address:end_address]
+                self.logger.debug("data: {}; start_address: {}; end_address: {}".format(data, hex(start_address), hex(end_address)))
                 return data, start_address, end_address
             else:
                 offset -= 1
+        self.logger.debug("Done looking for previous string data.")
         return None, None, None
 
     def _get_next_string_data(self, offset):
@@ -398,8 +399,7 @@ class VxTarget(object):
             if self._is_printable(self._firmware[start_offset]) is True:
                 # get string from offset
                 string, start_address, end_address = self._get_prev_string_data(start_offset)
-                self.logger.debug("string: {}; start_address: {}; end_address: {}".format((string, hex(start_address),
-                                                                                           hex(end_address))))
+                self.logger.debug("string: {}; start_address: {}; end_address: {}".format(string, hex(start_address), hex(end_address)))
                 # check string is function name
                 if self._check_is_func_name(string) is False:
                     if len(temp_str_tab_data) < count:
@@ -413,8 +413,7 @@ class VxTarget(object):
 
                 # get previous string from offset
                 prev_string, prev_start_address, prev_end_address = self._get_prev_string_data(start_address - 1)
-                self.logger.debug("prev_string: {}, prev_start_address: {}, prev_end_address: {}".format(
-                    (prev_string, hex(prev_start_address), hex(prev_end_address))))
+                self.logger.debug("prev_string: {}, prev_start_address: {}, prev_end_address: {}".format(prev_string, hex(prev_start_address), hex(prev_end_address)))
                 if prev_start_address:
                     # strings interval should less than 4
                     if 4 < (start_address - prev_end_address):
@@ -471,7 +470,7 @@ class VxTarget(object):
         temp_str_tab_data = sorted(temp_str_tab_data, key=lambda x: (x[1]))
         table_start_offset = temp_str_tab_data[0][1]
         table_end_offset = temp_str_tab_data[-1][2]
-        self.logger.info("Found a string table at: {} to {}".format((hex(table_start_offset), hex(table_end_offset))))
+        self.logger.info("Found a string table at: {} to {}".format(hex(table_start_offset), hex(table_end_offset)))
         return table_start_offset, table_end_offset
 
     def get_string_table(self, str_start_address, str_end_address):
@@ -521,9 +520,7 @@ class VxTarget(object):
             self.logger.debug("self._symbol_table[func_index]: {}".format(self._symbol_table[func_index]))
 
             if (func_index >= len(self._symbol_table)) or (str_index >= len(self._string_table)):
-                self.logger.debug(
-                    "_check_fix False: func_index greater than length of _symbol_table, or str_index greater than length of _string_table."
-                )
+                self.logger.debug("_check_fix False: func_index greater than length of _symbol_table, or str_index greater than length of _string_table.")
                 return False
             if i == count - 1:
                 if fault_count < 10:
@@ -576,14 +573,11 @@ class VxTarget(object):
         for str_index in range(len(self._string_table)):
             for func_index in range(len(self._symbol_table)):
                 self.logger.debug("self._string_table[str_index]['length']: {}".format(self._string_table[str_index]['length']))
-                self.logger.debug("self._symbol_table[func_index]['symbol_name_length']: {}".format(
-                    self._symbol_table[func_index]['symbol_name_length']))
+                self.logger.debug("self._symbol_table[func_index]['symbol_name_length']: {}".format(self._symbol_table[func_index]['symbol_name_length']))
                 if self._string_table[str_index]['length'] == self._symbol_table[func_index]['symbol_name_length']:
                     if self._check_fix(func_index, str_index) is True:
-                        self.logger.debug("self._symbol_table[func_index]['symbol_name_addr']: {}".format(
-                            self._symbol_table[func_index]['symbol_name_addr']))
-                        self.logger.debug(
-                            "self._string_table[str_index]['address']: %s" % self._string_table[str_index]['address'])
+                        self.logger.debug("self._symbol_table[func_index]['symbol_name_addr']: {}".format(self._symbol_table[func_index]['symbol_name_addr']))
+                        self.logger.debug("self._string_table[str_index]['address']: %s" % self._string_table[str_index]['address'])
                         self.load_address = self._symbol_table[func_index]['symbol_name_addr'] - \
                                             self._string_table[str_index]['address']
                         self.logger.info('load address is {}'.format(hex(self.load_address)))
@@ -666,12 +660,7 @@ class VxTarget(object):
                 symbol_flag = symbol["symbol_flag"]
                 symbol_name_firmware_addr = symbol_name_addr - self.load_address
                 symbol_name = self.get_string_from_firmware_by_offset(symbol_name_firmware_addr)
-                self.symbols.append({
-                    "symbol_name": symbol_name,
-                    "symbol_name_addr": symbol_name_addr,
-                    "symbol_dest_addr": symbol_dest_addr,
-                    "symbol_flag": symbol_flag
-                })
+                self.symbols.append({"symbol_name": symbol_name, "symbol_name_addr": symbol_name_addr, "symbol_dest_addr": symbol_dest_addr, "symbol_flag": symbol_flag})
             return self.symbols
 
         else:
