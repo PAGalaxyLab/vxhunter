@@ -2,17 +2,25 @@
 
 import logging
 import string
+import struct
+import sys
+
+# Constants from common
+from common import can_demangle
+# Objects from common
+from common import demangler
+# Functions from common
+from common import is_address_in_current_program
 
 from ghidra.program.model.util import CodeUnitInsertionException
 from ghidra.program.model.data import (CharDataType, UnsignedIntegerDataType, IntegerDataType, UnsignedLongDataType, ShortDataType, PointerDataType, VoidDataType, ByteDataType, ArrayDataType, StructureDataType, EnumDataType)
 from ghidra.program.model.symbol import RefType, SourceType
-from common import *
 
 # The Python module that Ghidra directly launches is always called __main__.  If we import
 # everything from that module, this module will behave as if Ghidra directly launched it.
 from __main__ import *
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 function_name_key_words = ['bzero', 'usrInit', 'bfill']
@@ -344,21 +352,25 @@ def demangled_symbol(symbol_string):
                 sym_demangled = demangler.demangle(symbol_string, False)
 
         except DemangledException as err:
-            logger.debug("DemangledException: symbol_string: {}, reason:{}".format(symbol_string, err))
+            logger.debug("First pass demangling failed: symbol_string: {}, reason: {}".format(symbol_string, err))
+            pass
 
-        try:
-            if not sym_demangled:
+        if not sym_demangled:
+            try:
                 # Temp fix to handle _ prefix function name by remove _ prefix before demangle
                 sym_demangled = demangler.demangle(symbol_string[1:], False)
 
-        except DemangledException as err:
-            logger.debug("DemangledException: symbol_string: {}, reason:{}".format(symbol_string, err))
+            except DemangledException as err:
+                logger.debug("Second pass demangling failed: symbol_string: {}, reason:{}".format(symbol_string, err))
+                pass
 
         if sym_demangled:
             sym_demangled_name = sym_demangled.getSignature(False)
 
-        if sym_demangled_name:
-            logger.debug("sym_demangled_name: {}".format(sym_demangled_name))
+            if sym_demangled_name:
+                logger.debug("sym_demangled_name: {}".format(sym_demangled_name))
+            else:
+                logger.debug("Demangled symbol name for string {} is None.".format(symbol_string))
 
     return sym_demangled_name
 
@@ -372,28 +384,26 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
         logger.debug("Have symbol name {} at address {}.".format(symbol_name_string, symbol_name_address))
         # There might be a problem here. It seems like we're getting exceptions because bogus data exists at locations that
         # never gets removed because this code doesn't run...
+        try:
+            symbol_name_string = createAsciiString(symbol_name_address).getValue()
+            logger.debug("Created ascii string {} at {}.".format(symbol_name_string, symbol_name_address))
+        except CodeUnitInsertionException as err:
+            logger.error("Failed to create ascii string for symbol named {} at {}: {}".format(symbol_name, symbol_name_address, err))
+        except Exception as err:
+            logger.error("Failed to create ascii string for symbol named {} at {}: {}; returning.".format(symbol_name, symbol_name_address, err))
+            return
+
         if getDataAt(symbol_name_address):
             logger.debug("Data detected at {}; removing to make room for symbol {}".format(symbol_name_address, symbol_name))
             removeDataAt(symbol_name_address)
         else:
-            logger.debug("No data detected at {}. Trying to remove data to make room for symbol {} anyway.".format(symbol_address, symbol_name))
-            removeDataAt(symbol_name_address)
-
-        try:
-            symbol_name_string = createAsciiString(symbol_name_address).getValue()
-            logger.debug("symbol_name_string: {}".format(symbol_name_string))
-
-        except CodeUnitInsertionException as err:
-            logger.error(err)
-
-        except:
-            return
+            logger.debug("No data detected at {}. Moving on...".format(symbol_address))
 
     if getInstructionAt(symbol_address):
-        logger.debug("removeInstructionAt: {}".format(symbol_address))
+        logger.debug("Instruction detected at {}; removing to make room for symbol {}".format(symbol_address, symbol_name))
         removeInstructionAt(symbol_address)
     else:
-        logger.debug("No instruction found at {}.".format(symbol_address))
+        logger.debug("No instruction detected at {}. Moving on...".format(symbol_address))
 
     # Demangle symName
     try:
@@ -411,21 +421,28 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
                 # Add original symbol name
                 createLabel(symbol_address, symbol_name_string, True)
 
+            logger.debug("function: {}; sym_demangled_name: {}".format(function, sym_demangled_name))
+
             if function and sym_demangled_name:
                 # Add demangled string to comment
                 codeUnit = listing.getCodeUnitAt(symbol_address)
                 codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
                 # Rename function
+                # TODO: demangle_function can probably be replaced. Function objects in the Ghidra API have each
+                # of .getName(), .getParameters, and .getReturn.
                 function_return, function_name, function_parameters = demangle_function(sym_demangled_name)
+
                 logger.debug("Demangled function name is: {}".format(function_name))
                 logger.debug("Demangled function return is: {}".format(function_return))
                 logger.debug("Demangled function parameters is: {}".format(function_parameters))
 
                 if function_name:
                     function.setName(function_name, SourceType.USER_DEFINED)
-                    # Todo: Add parameters later
+                    # TODO: Add parameters later
                 # Add original symbol name
                 createLabel(symbol_address, symbol_name_string, True)
+            if function is None and sym_demangled_name is not None:
+                logger.debug('Function for symbol {} was None. In createFunction, one or more functions overlapped the specified address set.'.format(sym_demangled_name))
 
         else:
             createLabel(symbol_address, symbol_name_string, True)
@@ -435,9 +452,6 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
 
     except Exception as err:
         logger.error("Create symbol failed: symbol_name: {}, symbol_name_address: {}, symbol_address: {}, symbol_type: {} reason: {}".format(symbol_name_string, symbol_name_address, symbol_address, symbol_type, err))
-
-    except:
-        logger.debug("Create symbol failed: symbol_name: {}, symbol_name_address: {}, symbol_address: {}, symbol_type: {} with Unknown error".format(symbol_name_string, symbol_name_address, symbol_address, symbol_type))
 
 
 def fix_symbol_table_structs(symbol_table_start, symbol_table_end, vx_version):
@@ -451,8 +465,8 @@ def fix_symbol_table_structs(symbol_table_start, symbol_table_end, vx_version):
     symbol_table_start_addr = toAddr(symbol_table_start)
     symbol_table_end_addr = toAddr(symbol_table_end)
 
-    ea = symbol_table_start_addr
     sym_length = (symbol_table_end - symbol_table_start) // symbol_interval
+    logger.debug("Fixing symbol table with start at {} and end at {} with length {}.".format(symbol_table_start_addr, symbol_table_end_addr, sym_length))
     createLabel(symbol_table_start_addr, "vxSymTbl", True)
     clearListing(symbol_table_start_addr, symbol_table_end_addr)
     vx_symbol_array_data_type = ArrayDataType(dt, sym_length, dt.getLength())

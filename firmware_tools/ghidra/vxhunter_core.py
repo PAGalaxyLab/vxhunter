@@ -94,7 +94,7 @@ class VxTarget(object):
         if logger is None:
             self.logger = logging.getLogger(__name__)
             # FIXME: Log level
-            self.logger.setLevel(logging.DEBUG)
+            self.logger.setLevel(logging.INFO)
             consolehandler = logging.StreamHandler()
             console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
             consolehandler.setFormatter(console_format)
@@ -111,7 +111,7 @@ class VxTarget(object):
         self.find_symbol_table()
         if self._has_symbol is False:
             return None
-        self.logger.debug("has_symbol: %s" % self._has_symbol)
+        self.logger.debug("has_symbol: {}".format(self._has_symbol))
         self.get_symbol_table()
 
     def _check_vxworks_endian(self):
@@ -255,8 +255,7 @@ class VxTarget(object):
 
                 if self._check_symbol_format_simple(check_data):
                     self.symbol_table_end = i + self._symbol_interval
-                    # FIXME: Uncomment eventually
-                    # self.logger.debug("self.symbol_table_end: {:010x}".format(self.symbol_table_end))
+                    self.logger.debug("self.symbol_table_end: {:010x}".format(self.symbol_table_end))
 
                 else:
                     self.logger.info("Symbol table end offset: {}".format(hex(self.symbol_table_end)))
@@ -507,41 +506,45 @@ class VxTarget(object):
         :param str_index:
         :return:
         """
-        fault_count = 0
-
-        if len(self._symbol_table) < default_check_count:
-            count = len(self._symbol_table)
-        else:
-            count = default_check_count
-        for i in range(count):
-            self.logger.debug("str_index: {}".format(str_index))
-            self.logger.debug("self._string_table[str_index]: {}".format(self._string_table[str_index]))
-            self.logger.debug("func_index: {}".format(func_index))
-            self.logger.debug("self._symbol_table[func_index]: {}".format(self._symbol_table[func_index]))
-
-            if (func_index >= len(self._symbol_table)) or (str_index >= len(self._string_table)):
-                self.logger.debug("_check_fix False: func_index greater than length of _symbol_table, or str_index greater than length of _string_table.")
-                return False
-            if i == count - 1:
-                if fault_count < 10:
-                    self.logger.debug("_check_fix True")
-                    return True
-                else:
-                    self.logger.debug("_check_fix False: Too many faults.")
-                    return False
-
-            if self._string_table[str_index]['length'] == self._symbol_table[func_index]['symbol_name_length']:
-                func_index += 1
-                str_index += 1
-                self.logger.debug("_check_fix continue")
-
-            elif self._symbol_table[func_index]['symbol_name_length'] < self._string_table[str_index]['length']:
-                # Sometime Symbol name might point to mid of string.
-                fault_count += 1
-                func_index += 1
+        try:
+            fault_count = 0
+            self.logger.debug("Symbol table's first element: {}".format(self._symbol_table[0]))
+            if len(self._symbol_table) <= default_check_count:
+                count = len(self._symbol_table)
+                self.logger.debug("Length of symbol table, {}, is less than default. Setting iteration count to actual length of table, {}.".format(len(self._symbol_table), count))
             else:
-                self.logger.debug("_check_fix False: symbol_name_length from func_index larger than length from str_index.")
-                return False
+                count = default_check_count
+                self.logger.debug("Length of symbol table, {}, is greater than default. Setting iteration count to default, {}.".format(len(self._symbol_table), count))
+            for i in range(count):
+
+                if (func_index >= len(self._symbol_table)) or (str_index >= len(self._string_table)):
+                    self.logger.debug("_check_fix False: func_index greater than length of _symbol_table, or str_index greater than length of _string_table.")
+                    return False
+                self.logger.debug("str_index: {}; _string_table[str_index]: {}".format(str_index, self._string_table[str_index]))
+                self.logger.debug("func_index: {}; _symbol_table[func_index]: {}".format(func_index, self._symbol_table[func_index]))
+                if i == count - 1:
+                    if fault_count < 10:
+                        self.logger.debug("_check_fix True")
+                        return True
+                    else:
+                        self.logger.debug("_check_fix False: Too many faults.")
+                        return False
+
+                if self._string_table[str_index]['length'] == self._symbol_table[func_index]['symbol_name_length']:
+                    func_index += 1
+                    str_index += 1
+                    self.logger.debug("_check_fix continue")
+
+                elif self._symbol_table[func_index]['symbol_name_length'] < self._string_table[str_index]['length']:
+                    # Sometime Symbol name might point to mid of string.
+                    fault_count += 1
+                    func_index += 1
+                else:
+                    self.logger.debug("_check_fix False: symbol_name_length from func_index larger than length from str_index.")
+                    return False
+        except Exception as e:
+            self.logger.exception(e)
+            raise
 
     def find_loading_address(self):
         """ Find VxWorks image load address by automatic analysis.
@@ -568,6 +571,12 @@ class VxTarget(object):
 
         str_start_address, str_end_address = self.find_string_table_by_key_function_index(key_function_index)
         self.get_string_table(str_start_address, str_end_address)
+        import json
+        with open('/Users/mydriasis/Desktop/symbol_table.log', 'w') as file_handle:
+            file_handle.write(json.dumps(self._symbol_table))
+        with open('/Users/mydriasis/Desktop/string_table.log', 'w') as file_handle:
+            file_handle.write(json.dumps(self._string_table))
+
         # TODO: Need improve performance
         self.logger.info("Starting loading address analysis")
         for str_index in range(len(self._string_table)):
@@ -595,6 +604,7 @@ class VxTarget(object):
         if not self._has_symbol:
             return False
         if len(self._symbol_table) > default_check_count:
+            self.logger.debug("Length of symbol table greater than default. Setting iteration count to default of {}.".format(default_check_count))
             count = default_check_count
         else:
             count = len(self._symbol_table)

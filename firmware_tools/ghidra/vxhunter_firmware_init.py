@@ -9,8 +9,7 @@ from ghidra.util.task import TaskMonitor
 
 # Logger setup
 logger = logging.getLogger(__name__)
-# FIXME: Log level
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 consolehandler = logging.StreamHandler()
 console_format = logging.Formatter('[%(levelname)-8s][%(module)s] %(message)s')
 consolehandler.setFormatter(console_format)
@@ -24,15 +23,13 @@ except Exception as err:
     pass
 
 try:
-    # vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
-    # if vx_version == u"5.x":
-    #     vx_version = 5
+    vx_version = askChoice("Choice", "Please choose VxWorks main Version ", ["5.x", "6.x"], "5.x")
+    if vx_version == u"5.x":
+        vx_version = 5
 
-    # elif vx_version == u"6.x":
-    #     vx_version = 6
+    elif vx_version == u"6.x":
+        vx_version = 6
 
-    # FIXME: Reimplement choice. Set to 6 for debugging purposes.
-    vx_version = 6
     if vx_version:
         firmware_path = currentProgram.domainFile.getMetadata()['Executable Location']
         firmware = open(firmware_path, 'rb').read()
@@ -69,6 +66,7 @@ try:
                     add_symbol(symbol_name, symbol_name_addr, symbol_dest_addr, symbol_flag)
 
                 except Exception as err:
+                    logger.error("add_symbol failed: {}".format(err))
                     continue
 
         else:
