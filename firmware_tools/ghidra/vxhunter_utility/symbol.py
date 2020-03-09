@@ -1,34 +1,23 @@
 # coding=utf-8
-from ghidra.program.model.util import CodeUnitInsertionException
-from ghidra.program.model.data import (
-    CharDataType,
-    UnsignedIntegerDataType,
-    IntegerDataType,
-    UnsignedLongDataType,
-    ShortDataType,
-    PointerDataType,
-    VoidDataType,
-    ByteDataType,
-    ArrayDataType,
-    StructureDataType,
-    EnumDataType
-)
-from ghidra.program.model.symbol import RefType, SourceType
-from common import *
+
+import logging
 import string
 
+from ghidra.program.model.util import CodeUnitInsertionException
+from ghidra.program.model.data import (CharDataType, UnsignedIntegerDataType, IntegerDataType, UnsignedLongDataType, ShortDataType, PointerDataType, VoidDataType, ByteDataType, ArrayDataType, StructureDataType, EnumDataType)
+from ghidra.program.model.symbol import RefType, SourceType
+from common import *
 
 # The Python module that Ghidra directly launches is always called __main__.  If we import
 # everything from that module, this module will behave as if Ghidra directly launched it.
 from __main__ import *
 
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 function_name_key_words = ['bzero', 'usrInit', 'bfill']
 
-need_create_function = [
-    0x04,
-    0x05
-]
+need_create_function = [0x04, 0x05]
 
 # tp_link_symbol_map = ['']
 
@@ -112,7 +101,6 @@ vx_5_sys_symtab.replaceAtOffset(0x30, void_ptr_type, 4, "symPartId", "memory par
 vx_5_sys_symtab.replaceAtOffset(0x34, unsigned_int_type, 4, "sameNameOk", "symbol table name clash policy")
 vx_5_sys_symtab.replaceAtOffset(0x38, unsigned_int_type, 4, "PART_ID", "current number of symbols in table")
 
-
 vx_5_hash_tbl = StructureDataType("VX_5_HASH_TABLE", 0x18)
 vx_5_hash_tbl.replaceAtOffset(0x00, void_ptr_type, 4, "objCore", "Pointer to object's class")
 vx_5_hash_tbl.replaceAtOffset(0x04, unsigned_int_type, 4, "elements", "Number of elements in table")
@@ -124,7 +112,6 @@ vx_5_hash_tbl.replaceAtOffset(0x14, void_ptr_type, 4, "*pHashTbl", "Pointer to h
 vx_5_sl_list = StructureDataType("VX_5_HASH_TABLE_LIST", 0x08)
 vx_5_sl_list.replaceAtOffset(0x00, void_ptr_type, 4, "head", "header of list")
 vx_5_sl_list.replaceAtOffset(0x04, void_ptr_type, 4, "tail", "tail of list")
-
 '''
 typedef struct clPool
     {
@@ -135,9 +122,9 @@ typedef struct clPool
     int			clUsage;	/* number of times used */
     CL_BUF_ID		pClHead;	/* pointer to the cluster head */
     struct netPool *	pNetPool;	/* pointer to the netPool */
-    } CL_POOL; 
+    } CL_POOL;
 
-typedef CL_POOL * CL_POOL_ID; 
+typedef CL_POOL * CL_POOL_ID;
 '''
 vx_5_clPool = StructureDataType("VX_5_clPool", 0x1c)
 vx_5_clPool.replaceAtOffset(0x00, int_type, 4, "clSize", "cluster size")
@@ -147,7 +134,6 @@ vx_5_clPool.replaceAtOffset(0x0c, int_type, 4, "clNumFree", "number of clusters 
 vx_5_clPool.replaceAtOffset(0x10, int_type, 4, "clUsage", "number of times used")
 vx_5_clPool.replaceAtOffset(0x14, void_ptr_type, 4, "pClHead", "pointer to the cluster head")
 vx_5_clPool.replaceAtOffset(0x18, void_ptr_type, 4, "pNetPool", "pointer to the netPool")
-
 '''
 typedef struct mbstat
     {
@@ -165,15 +151,12 @@ vx_5_pool_stat.replaceAtOffset(0x00, unsigned_long_type, 4, "mNum", "mBlks obtai
 vx_5_pool_stat.replaceAtOffset(0x04, int_type, 4, "mDrops", "times failed to find space")
 vx_5_pool_stat.replaceAtOffset(0x08, int_type, 4, "mWait", "times waited for space")
 vx_5_pool_stat.replaceAtOffset(0x0c, int_type, 4, "mDrain", "times drained protocols for space")
-vx_5_pool_stat.replaceAtOffset(0x10, vx_5_mTypes_array_data_type, vx_5_mTypes_array_data_type.getLength(),
-                               "mTypes", "type specific mBlk allocations")
-
-
+vx_5_pool_stat.replaceAtOffset(0x10, vx_5_mTypes_array_data_type, vx_5_mTypes_array_data_type.getLength(), "mTypes", "type specific mBlk allocations")
 '''
 struct	poolFunc			/* POOL_FUNC */
     {
     /* pointer to the pool initialization routine */
-    STATUS	(*pInitRtn) (NET_POOL_ID pNetPool, M_CL_CONFIG * pMclBlkConfig, CL_DESC * pClDescTbl, 
+    STATUS	(*pInitRtn) (NET_POOL_ID pNetPool, M_CL_CONFIG * pMclBlkConfig, CL_DESC * pClDescTbl,
                          int clDescTblNumEnt, BOOL fromKheap);
 
     /* pointer to mBlk free routine */
@@ -193,7 +176,7 @@ struct	poolFunc			/* POOL_FUNC */
 
     /* pointer to cluster Blk get routine */
     CL_BLK_ID	(*pClBlkGetRtn) (NET_POOL_ID pNetPool, int canWait);
-    
+
     /* pointer to a cluster buffer get routine */
     char *	(*pClGetRtn) (NET_POOL_ID pNetPool, CL_POOL_ID pClPool);
 
@@ -222,8 +205,6 @@ for func_name in vx_5_pool_func_dict:
     func_desc = vx_5_pool_func_dict[func_name]
     vx_5_pool_func_tbl.replaceAtOffset(func_offset, void_ptr_type, 4, "*{}".format(func_name), func_desc)
     func_offset += 0x04
-
-
 '''
 struct netPool				/* NET_POOL */
     {
@@ -253,77 +234,18 @@ vx_5_netPool.replaceAtOffset(0x14, int_type, 4, "clLg2Max", "cluster log2 maximu
 vx_5_netPool.replaceAtOffset(0x18, int_type, 4, "clSizeMax", "maximum cluster size")
 vx_5_netPool.replaceAtOffset(0x1C, int_type, 4, "clLg2Min", "cluster log2 minimum size")
 vx_5_netPool.replaceAtOffset(0x20, int_type, 4, "clSizeMin", "minimum cluster size")
-vx_5_netPool.replaceAtOffset(0x24, vx_5_clTbl_array_data_type, vx_5_clTbl_array_data_type.getLength(),
-                             "clTbl", "pool table")
+vx_5_netPool.replaceAtOffset(0x24, vx_5_clTbl_array_data_type, vx_5_clTbl_array_data_type.getLength(), "clTbl", "pool table")
 vx_5_netPool.replaceAtOffset(0x50, void_ptr_type, 4, "pPoolStat", "pool statistics")
 vx_5_netPool.replaceAtOffset(0x54, void_ptr_type, 4, "pFuncTbl", "ptr to function ptr table")
-
 
 function_name_chaset = string.letters
 function_name_chaset += string.digits
 function_name_chaset += "_:.<>,*"  # For C++
 function_name_chaset += "()~+-=/%"  # For C++ special eg operator+(ZafBignumData const &,long)
 ghidra_builtin_types = [
-    'undefined',
-    'byte',
-    'uint',
-    'ushort',
-    'bool',
-    'complex16',
-    'complex32',
-    'complex8',
-    'doublecomplex',
-    'dwfenc',
-    'dword',
-    'filetime',
-    'float10',
-    'float16',
-    'float2',
-    'float4',
-    'float8',
-    'floatcomplex',
-    'guid',
-    'imagebaseoffset32',
-    'imagebaseoffset64',
-    'int16',
-    'int3',
-    'int5',
-    'int6',
-    'int7',
-    'long',
-    'longdouble',
-    'longdoublecomplex',
-    'longlong',
-    'mactime',
-    'prel31',
-    'qword',
-    'sbyte',
-    'schar',
-    'sdword',
-    'segmentedcodeaddress',
-    'shiftedaddress',
-    'sqword',
-    'sword',
-    'wchar16',
-    'wchar32',
-    'uchar',
-    'uint16',
-    'uint3',
-    'uint5',
-    'uint6',
-    'uint7',
-    'ulong',
-    'ulonglong',
-    'undefined1',
-    'undefined2',
-    'undefined3',
-    'undefined4',
-    'undefined5',
-    'undefined6',
-    'undefined7',
-    'undefined8',
-    'wchar_t',
-    'word'
+    'undefined', 'byte', 'uint', 'ushort', 'bool', 'complex16', 'complex32', 'complex8', 'doublecomplex', 'dwfenc', 'dword', 'filetime', 'float10', 'float16', 'float2', 'float4', 'float8', 'floatcomplex', 'guid', 'imagebaseoffset32', 'imagebaseoffset64',
+    'int16', 'int3', 'int5', 'int6', 'int7', 'long', 'longdouble', 'longdoublecomplex', 'longlong', 'mactime', 'prel31', 'qword', 'sbyte', 'schar', 'sdword', 'segmentedcodeaddress', 'shiftedaddress', 'sqword', 'sword', 'wchar16', 'wchar32', 'uchar',
+    'uint16', 'uint3', 'uint5', 'uint6', 'uint7', 'ulong', 'ulonglong', 'undefined1', 'undefined2', 'undefined3', 'undefined4', 'undefined5', 'undefined6', 'undefined7', 'undefined8', 'wchar_t', 'word'
 ]
 
 
@@ -444,12 +366,17 @@ def demangled_symbol(symbol_string):
 def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
     symbol_address = toAddr(symbol_address)
     symbol_name_string = symbol_name
-
     # Get symbol_name
     if symbol_name_address:
         symbol_name_address = toAddr(symbol_name_address)
+        logger.debug("Have symbol name {} at address {}.".format(symbol_name_string, symbol_name_address))
+        # There might be a problem here. It seems like we're getting exceptions because bogus data exists at locations that
+        # never gets removed because this code doesn't run...
         if getDataAt(symbol_name_address):
-            logger.debug("removeDataAt: {}".format(symbol_name_address))
+            logger.debug("Data detected at {}; removing to make room for symbol {}".format(symbol_name_address, symbol_name))
+            removeDataAt(symbol_name_address)
+        else:
+            logger.debug("No data detected at {}. Trying to remove data to make room for symbol {} anyway.".format(symbol_address, symbol_name))
             removeDataAt(symbol_name_address)
 
         try:
@@ -457,7 +384,7 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
             logger.debug("symbol_name_string: {}".format(symbol_name_string))
 
         except CodeUnitInsertionException as err:
-            logger.error("Got CodeUnitInsertionException: {}".format(err))
+            logger.error(err)
 
         except:
             return
@@ -465,6 +392,8 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
     if getInstructionAt(symbol_address):
         logger.debug("removeInstructionAt: {}".format(symbol_address))
         removeInstructionAt(symbol_address)
+    else:
+        logger.debug("No instruction found at {}.".format(symbol_address))
 
     # Demangle symName
     try:
@@ -472,8 +401,7 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
         sym_demangled_name = demangled_symbol(symbol_name_string)
 
         if symbol_name_string and (symbol_type in need_create_function):
-            logger.debug("Start disassemble function {} at address {}".format(symbol_name_string,
-                                                                              symbol_address.toString()))
+            logger.debug("Start disassemble function {} at address {}".format(symbol_name_string, symbol_address.toString()))
             disassemble(symbol_address)
             function = createFunction(symbol_address, symbol_name_string)
             if function:
@@ -506,18 +434,10 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
                 codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
 
     except Exception as err:
-        logger.error("Create symbol failed: symbol_name:{}, symbol_name_address:{}, "
-                     "symbol_address:{}, symbol_type:{} reason: {}".format(symbol_name_string,
-                                                                           symbol_name_address,
-                                                                           symbol_address,
-                                                                           symbol_type, err))
+        logger.error("Create symbol failed: symbol_name: {}, symbol_name_address: {}, symbol_address: {}, symbol_type: {} reason: {}".format(symbol_name_string, symbol_name_address, symbol_address, symbol_type, err))
 
     except:
-        logger.debug("Create symbol failed: symbol_name:{}, symbol_name_address:{}, "
-                     "symbol_address{}, symbol_type{} with Unknown error".format(symbol_name_string,
-                                                                                 symbol_name_address,
-                                                                                 symbol_address,
-                                                                                 symbol_type))
+        logger.debug("Create symbol failed: symbol_name: {}, symbol_name_address: {}, symbol_address: {}, symbol_type: {} with Unknown error".format(symbol_name_string, symbol_name_address, symbol_address, symbol_type))
 
 
 def fix_symbol_table_structs(symbol_table_start, symbol_table_end, vx_version):
@@ -554,11 +474,11 @@ def is_vx_symbol_file(file_data, is_big_endian=True):
 
 
 def get_symbol(symbol_name, symbom_prefix="_"):
-        symbol = getSymbol(symbol_name, currentProgram.getGlobalNamespace())
-        if not symbol and symbom_prefix:
-            symbol = getSymbol("{}{}".format(symbom_prefix, symbol_name), currentProgram.getGlobalNamespace())
+    symbol = getSymbol(symbol_name, currentProgram.getGlobalNamespace())
+    if not symbol and symbom_prefix:
+        symbol = getSymbol("{}{}".format(symbom_prefix, symbol_name), currentProgram.getGlobalNamespace())
 
-        return symbol
+    return symbol
 
 
 def fix_symbol_by_chains(head, tail, vx_version):
