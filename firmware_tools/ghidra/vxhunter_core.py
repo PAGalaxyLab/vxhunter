@@ -292,7 +292,7 @@ class VxTarget(object):
         except UnicodeDecodeError:
             return False
 
-    def _check_is_func_name(self, string):
+    def _is_func_name(self, string):
         """ Check target string is match function name format.
 
         :param string: string to check.
@@ -303,10 +303,7 @@ class VxTarget(object):
         # If any of the data matches a predefined regex of bad characters, or if any character in the string is unprintable, or if its length is over
         # 512, we must return False.
 
-        if len(string) > 512 or re.search(r'.*[\\%\+,&\/\)\(\[\]].*', string) or not self._is_printable(string):
-            return False
-
-        return True
+        return len(string) <= 512 and not re.search(r'.*[\\%\+,&\/\)\(\[\]].*', string) and self._is_printable(string)
 
     def _get_prev_string_data(self, offset):
         """ Get previous string from giving offset.
@@ -375,7 +372,7 @@ class VxTarget(object):
                 string, start_address, end_address = self._get_prev_string_data(start_offset)
                 self.logger.debug("string: {}; start_address: {}; end_address: {}".format(string, hex(start_address), hex(end_address)))
                 # check string is function name
-                if self._check_is_func_name(string) is False:
+                if self._is_func_name(string) is False:
                     if len(temp_str_tab_data) < count:
                         self.logger.error("Can't find any string table with key index: {}".format(string))
                         return None, None
@@ -411,7 +408,7 @@ class VxTarget(object):
                 # get string from offset
                 string, start_address, end_address = self._get_next_string_data(end_offset)
                 # check string is function name
-                if self._check_is_func_name(string) is False:
+                if self._is_func_name(string) is False:
                     if len(temp_str_tab_data) < count:
                         temp_str_tab_data = []
                         end_offset = end_address
