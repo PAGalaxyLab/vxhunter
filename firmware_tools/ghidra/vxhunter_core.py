@@ -1,25 +1,7 @@
 # coding=utf-8
 import logging
+import re
 import struct
-
-# class LoggerAdapter(logging.LoggerAdapter):
-#     def __init__(self, prefix, logger):
-#         super(LoggerAdapter, self).__init__(logger, {})
-#         self.prefix = prefix
-
-#     def process(self, message, kwargs):
-#         return '[{}] {}'.format(self.prefix, message), kwargs
-
-# class logger:
-#     def __init__(self, name):
-#         logger = logging.getLogger(self.__class__.__name__)
-#         self.logger = LoggerAdapter(name, logger)
-#         self.name = name
-
-#     def info(self, message):
-#         self.logger.info('{}'.format(message))
-
-#     def
 
 default_check_count = 100
 
@@ -93,7 +75,6 @@ class VxTarget(object):
 
         if logger is None:
             self.logger = logging.getLogger(__name__)
-            # FIXME: Log level
             self.logger.setLevel(logging.INFO)
             consolehandler = logging.StreamHandler()
             console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
@@ -285,7 +266,7 @@ class VxTarget(object):
                 unpack_format = '<I'
             symbol_name_addr = int(struct.unpack(unpack_format, symbol_name_addr)[0])
             symbol_dest_addr = int(struct.unpack(unpack_format, symbol_dest_addr)[0])
-            # self.logger.debug("symbol_name_addr: {}; symbol_dest_addr: {}".format(symbol_name_addr, symbol_dest_addr))
+            self.logger.debug("symbol_name_addr: {}; symbol_dest_addr: {}".format(symbol_name_addr, symbol_dest_addr))
             self._symbol_table.append({'symbol_name_addr': symbol_name_addr, 'symbol_name_length': None, 'symbol_dest_addr': symbol_dest_addr, 'symbol_flag': symbol_flag, 'offset': i})
         # self.logger.debug("self._symbol_table: %s" % self._symbol_table)
         self.logger.debug("len(self._symbol_table): {}".format(len(self._symbol_table)))
@@ -298,7 +279,8 @@ class VxTarget(object):
 
     @staticmethod
     def _is_printable(c):
-        """ Check Char is printable.
+        """
+        Check Char is printable.
 
         :param c: char to check.
         :return: True if char is printable, False otherwise.
@@ -306,31 +288,24 @@ class VxTarget(object):
         try:
             # Not python 3 compatible
             c.decode('ascii')
-            # return 32 <= ord(c) <= 126
             return True
         except UnicodeDecodeError:
             return False
 
-    # TODO: Performance of this can be improved
     def _check_is_func_name(self, string):
         """ Check target string is match function name format.
 
         :param string: string to check.
         :return: True if string is match function name format, False otherwise.
         """
-        #
-        bad_str = ['\\', '%', '+', ',', '&', '/', ')', '(', '[', ']']
         # function name length should less than 512 byte
-        if len(string) > 512:
+
+        # If any of the data matches a predefined regex of bad characters, or if any character in the string is unprintable, or if its length is over
+        # 512, we must return False.
+
+        if len(string) > 512 or re.search(r'.*[\\%\+,&\/\)\(\[\]].*', string) or not self._is_printable(string):
             return False
 
-        for data in bad_str:
-            if data in string:
-                return False
-
-        for c in string:
-            if self._is_printable(c) is False:
-                return False
         return True
 
     def _get_prev_string_data(self, offset):
