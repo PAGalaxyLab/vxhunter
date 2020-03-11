@@ -13,20 +13,9 @@ from common import demangler
 from common import is_address_in_current_program
 
 from ghidra.program.model.util import CodeUnitInsertionException
-from ghidra.program.model.data import (
-    ArrayDataType,
-    ByteDataType,
-    CharDataType,
-    EnumDataType,
-    IntegerDataType,
-    PointerDataType,
-    ShortDataType,
-    StructureDataType,
-    UnsignedIntegerDataType,
-    UnsignedLongDataType,
-    VoidDataType
-)
 from ghidra.program.model.symbol import RefType, SourceType
+from vx_structs import *
+
 
 # The Python module that Ghidra directly launches is always called __main__.  If we import
 # everything from that module, this module will behave as if Ghidra directly launched it.
@@ -39,224 +28,7 @@ function_name_key_words = ['bzero', 'usrInit', 'bfill']
 
 need_create_function = [0x04, 0x05]
 
-# tp_link_symbol_map = ['']
-
-vx_5_symbol_type_enum = {
-    0x00: "Undefined Symbol",
-    0x01: "Global (external)",
-    0x02: "Local Absolute",
-    0x03: "Global Absolute",
-    0x04: "Local .text",
-    0x05: "Global .text",
-    0x06: "Local Data",
-    0x07: "Global Data",
-    0x08: "Local BSS",
-    0x09: "Global BSS",
-    0x12: "Local Common symbol",
-    0x13: "Global Common symbol",
-    0x40: "Local Symbols related to a PowerPC SDA section",
-    0x41: "Global Symbols related to a PowerPC SDA section",
-    0x80: "Local symbols related to a PowerPC SDA2 section",
-    0x81: "Global symbols related to a PowerPC SDA2 section"
-}
-
-vx_6_symbol_type_enum = {
-    0x00: "Undefined Symbol",
-    0x01: "Global (external)",
-    0x02: "Local Absolute",
-    0x03: "Global Absolute",
-    0x04: "Local .text",
-    0x05: "Global .text",
-    0x08: "Local Data",
-    0x09: "Global Data",
-    0x10: "Local BSS",
-    0x11: "Global BSS",
-    0x20: "Local Common symbol",
-    0x21: "Global Common symbol",
-    0x40: "Local Symbols",
-    0x41: "Global Symbols"
-}
-
-# Init data type
-ptr_data_type = PointerDataType()
-byte_data_type = ByteDataType()
-char_data_type = CharDataType()
-void_data_type = VoidDataType()
-unsigned_int_type = UnsignedIntegerDataType()
-int_type = IntegerDataType()
-unsigned_long_type = UnsignedLongDataType()
-short_data_type = ShortDataType()
-char_ptr_type = ptr_data_type.getPointer(char_data_type, 4)
-void_ptr_type = ptr_data_type.getPointer(void_data_type, 4)
 # Prepare VxWorks symbol types
-vx_5_sym_enum = EnumDataType("Vx5symType", 1)
-for flag in vx_5_symbol_type_enum:
-    vx_5_sym_enum.add(vx_5_symbol_type_enum[flag], flag)
-vx_6_sym_enum = EnumDataType("Vx6symType", 1)
-for flag in vx_6_symbol_type_enum:
-    vx_6_sym_enum.add(vx_6_symbol_type_enum[flag], flag)
-
-vx_5_symtbl_dt = StructureDataType("VX_5_SYMBOL_IN_TBL", 0x10)
-vx_5_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
-vx_5_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
-vx_5_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
-vx_5_symtbl_dt.replaceAtOffset(0x0c, short_data_type, 4, "symGroup", "")
-vx_5_symtbl_dt.replaceAtOffset(0x0e, vx_5_sym_enum, 1, "symType", "")
-vx_5_symtbl_dt.replaceAtOffset(0x0f, byte_data_type, 1, "End", "")
-
-vx_6_symtbl_dt = StructureDataType("VX_6_SYMBOL_IN_TBL", 0x14)
-vx_6_symtbl_dt.replaceAtOffset(0, unsigned_int_type, 4, "symHashNode", "")
-vx_6_symtbl_dt.replaceAtOffset(4, char_ptr_type, 4, "symNamePtr", "")
-vx_6_symtbl_dt.replaceAtOffset(8, void_ptr_type, 4, "symPrt", "")
-vx_6_symtbl_dt.replaceAtOffset(0x0c, unsigned_int_type, 4, "symRef", "moduleId of module, or predefined SYMREF")
-vx_6_symtbl_dt.replaceAtOffset(0x10, short_data_type, 4, "symGroup", "")
-vx_6_symtbl_dt.replaceAtOffset(0x12, vx_6_sym_enum, 1, "symType", "")
-vx_6_symtbl_dt.replaceAtOffset(0x13, byte_data_type, 1, "End", "")
-
-vx_5_sys_symtab = StructureDataType("VX_5_SYSTEM_SYMBOL_TABLE", 0x3C)
-vx_5_sys_symtab.replaceAtOffset(0x00, void_ptr_type, 4, "objCore", "Pointer to object's class")
-vx_5_sys_symtab.replaceAtOffset(0x04, void_ptr_type, 4, "nameHashId", "Pointer to HASH_TBL")
-vx_5_sys_symtab.replaceAtOffset(0x08, char_data_type, 0x28, "symMutex", "symbol table mutual exclusion sem")
-vx_5_sys_symtab.replaceAtOffset(0x30, void_ptr_type, 4, "symPartId", "memory partition id for symbols")
-vx_5_sys_symtab.replaceAtOffset(0x34, unsigned_int_type, 4, "sameNameOk", "symbol table name clash policy")
-vx_5_sys_symtab.replaceAtOffset(0x38, unsigned_int_type, 4, "PART_ID", "current number of symbols in table")
-
-vx_5_hash_tbl = StructureDataType("VX_5_HASH_TABLE", 0x18)
-vx_5_hash_tbl.replaceAtOffset(0x00, void_ptr_type, 4, "objCore", "Pointer to object's class")
-vx_5_hash_tbl.replaceAtOffset(0x04, unsigned_int_type, 4, "elements", "Number of elements in table")
-vx_5_hash_tbl.replaceAtOffset(0x08, void_ptr_type, 4, "keyCmpRtn", "Comparator function")
-vx_5_hash_tbl.replaceAtOffset(0x0c, void_ptr_type, 4, "keyRtn", "Pointer to object's class")
-vx_5_hash_tbl.replaceAtOffset(0x10, unsigned_int_type, 4, "keyArg", "Hash function argument")
-vx_5_hash_tbl.replaceAtOffset(0x14, void_ptr_type, 4, "*pHashTbl", "Pointer to hash table array")
-
-vx_5_sl_list = StructureDataType("VX_5_HASH_TABLE_LIST", 0x08)
-vx_5_sl_list.replaceAtOffset(0x00, void_ptr_type, 4, "head", "header of list")
-vx_5_sl_list.replaceAtOffset(0x04, void_ptr_type, 4, "tail", "tail of list")
-'''
-typedef struct clPool
-    {
-    int			clSize;		/* cluster size */
-    int			clLg2;		/* cluster log 2 size */
-    int			clNum; 		/* number of clusters */
-    int			clNumFree; 	/* number of clusters free */
-    int			clUsage;	/* number of times used */
-    CL_BUF_ID		pClHead;	/* pointer to the cluster head */
-    struct netPool *	pNetPool;	/* pointer to the netPool */
-    } CL_POOL;
-
-typedef CL_POOL * CL_POOL_ID;
-'''
-vx_5_clPool = StructureDataType("VX_5_clPool", 0x1c)
-vx_5_clPool.replaceAtOffset(0x00, int_type, 4, "clSize", "cluster size")
-vx_5_clPool.replaceAtOffset(0x04, int_type, 4, "clLg2", "cluster log 2 size")
-vx_5_clPool.replaceAtOffset(0x08, int_type, 4, "clNum", "number of clusters")
-vx_5_clPool.replaceAtOffset(0x0c, int_type, 4, "clNumFree", "number of clusters free")
-vx_5_clPool.replaceAtOffset(0x10, int_type, 4, "clUsage", "number of times used")
-vx_5_clPool.replaceAtOffset(0x14, void_ptr_type, 4, "pClHead", "pointer to the cluster head")
-vx_5_clPool.replaceAtOffset(0x18, void_ptr_type, 4, "pNetPool", "pointer to the netPool")
-'''
-typedef struct mbstat
-    {
-    ULONG	mNum;			/* mBlks obtained from page pool */
-    ULONG	mDrops;			/* times failed to find space */
-    ULONG	mWait;			/* times waited for space */
-    ULONG	mDrain;			/* times drained protocols for space */
-    ULONG	mTypes[256];		/* type specific mBlk allocations */
-    } M_STAT;
-'''
-VX_5_M_TYPES_SIZE = 256
-vx_5_mTypes_array_data_type = ArrayDataType(unsigned_long_type, VX_5_M_TYPES_SIZE, unsigned_long_type.getLength())
-vx_5_pool_stat = StructureDataType("VX_5_PoolStat", 0x10 + VX_5_M_TYPES_SIZE * 4)
-vx_5_pool_stat.replaceAtOffset(0x00, unsigned_long_type, 4, "mNum", "mBlks obtained from page pool")
-vx_5_pool_stat.replaceAtOffset(0x04, int_type, 4, "mDrops", "times failed to find space")
-vx_5_pool_stat.replaceAtOffset(0x08, int_type, 4, "mWait", "times waited for space")
-vx_5_pool_stat.replaceAtOffset(0x0c, int_type, 4, "mDrain", "times drained protocols for space")
-vx_5_pool_stat.replaceAtOffset(0x10, vx_5_mTypes_array_data_type, vx_5_mTypes_array_data_type.getLength(), "mTypes", "type specific mBlk allocations")
-'''
-struct	poolFunc			/* POOL_FUNC */
-    {
-    /* pointer to the pool initialization routine */
-    STATUS	(*pInitRtn) (NET_POOL_ID pNetPool, M_CL_CONFIG * pMclBlkConfig, CL_DESC * pClDescTbl,
-                         int clDescTblNumEnt, BOOL fromKheap);
-
-    /* pointer to mBlk free routine */
-    void	(*pMblkFreeRtn) (NET_POOL_ID pNetPool, M_BLK_ID pMblk);
-
-    /* pointer to cluster Blk free routine */
-    void	(*pClBlkFreeRtn) (CL_BLK_ID pClBlk);
-
-    /* pointer to cluster free routine */
-    void	(*pClFreeRtn) (NET_POOL_ID pNetPool, char * pClBuf);
-
-    /* pointer to mBlk/cluster pair free routine */
-    M_BLK_ID 	(*pMblkClFreeRtn) (NET_POOL_ID pNetPool, M_BLK_ID pMblk);
-
-    /* pointer to mBlk get routine */
-    M_BLK_ID	(*pMblkGetRtn) (NET_POOL_ID pNetPool, int canWait, UCHAR type);
-
-    /* pointer to cluster Blk get routine */
-    CL_BLK_ID	(*pClBlkGetRtn) (NET_POOL_ID pNetPool, int canWait);
-
-    /* pointer to a cluster buffer get routine */
-    char *	(*pClGetRtn) (NET_POOL_ID pNetPool, CL_POOL_ID pClPool);
-
-    /* pointer to mBlk/cluster pair get routine */
-    STATUS	(*pMblkClGetRtn) (NET_POOL_ID pNetPool, M_BLK_ID pMblk, int bufSize, int canWait, BOOL bestFit);
-
-    /* pointer to cluster pool Id get routine */
-    CL_POOL_ID	(*pClPoolIdGetRtn) (NET_POOL_ID pNetPool, int	bufSize, BOOL bestFit);
-    };
-'''
-vx_5_pool_func_dict = {
-    "pInitRtn": "pointer to the pool initialization routine",
-    "pMblkFreeRtn": "pointer to mBlk free routine",
-    "pClBlkFreeRtn": "pointer to cluster Blk free routine",
-    "pClFreeRtn": "pointer to cluster free routine",
-    "pMblkClFreeRtn": "pointer to mBlk/cluster pair free routine",
-    "pMblkGetRtn": "pointer to mBlk get routine",
-    "pClBlkGetRtn": "pointer to cluster Blk get routine",
-    "pClGetRtn": "pointer to a cluster buffer get routine",
-    "pMblkClGetRtn": "pointer to mBlk/cluster pair get routine",
-    "pClPoolIdGetRtn": "pointer to cluster pool Id get routine",
-}
-vx_5_pool_func_tbl = StructureDataType("VX_5_pFuncTbl", 0x28)
-func_offset = 0
-for func_name in vx_5_pool_func_dict:
-    func_desc = vx_5_pool_func_dict[func_name]
-    vx_5_pool_func_tbl.replaceAtOffset(func_offset, void_ptr_type, 4, "*{}".format(func_name), func_desc)
-    func_offset += 0x04
-'''
-struct netPool				/* NET_POOL */
-    {
-    M_BLK_ID	pmBlkHead;		/* head of mBlks */
-    CL_BLK_ID	pClBlkHead;		/* head of cluster Blocks */
-    int		mBlkCnt;		/* number of mblks */
-    int		mBlkFree;		/* number of free mblks */
-    int		clMask;			/* cluster availability mask */
-    int		clLg2Max;		/* cluster log2 maximum size */
-    int		clSizeMax;		/* maximum cluster size */
-    int		clLg2Min;		/* cluster log2 minimum size */
-    int		clSizeMin;		/* minimum cluster size */
-    CL_POOL * 	clTbl [CL_TBL_SIZE];	/* pool table */
-    M_STAT *	pPoolStat;		/* pool statistics */
-    POOL_FUNC *	pFuncTbl;		/* ptr to function ptr table */
-    };
-'''
-VX_5_CL_TBL_SIZE = 11
-vx_5_clTbl_array_data_type = ArrayDataType(void_ptr_type, VX_5_CL_TBL_SIZE, void_ptr_type.getLength())
-vx_5_netPool = StructureDataType("VX_5_netPool", 0x58)
-vx_5_netPool.replaceAtOffset(0x00, void_ptr_type, 4, "pmBlkHead", "head of mBlks")
-vx_5_netPool.replaceAtOffset(0x04, void_ptr_type, 4, "pClBlkHead", "head of cluster Blocks")
-vx_5_netPool.replaceAtOffset(0x08, int_type, 4, "mBlkCnt", "number of mblks")
-vx_5_netPool.replaceAtOffset(0x0C, int_type, 4, "mBlkFree", "number of free mblks")
-vx_5_netPool.replaceAtOffset(0x10, int_type, 4, "clMask", "ncluster availability mask")
-vx_5_netPool.replaceAtOffset(0x14, int_type, 4, "clLg2Max", "cluster log2 maximum size")
-vx_5_netPool.replaceAtOffset(0x18, int_type, 4, "clSizeMax", "maximum cluster size")
-vx_5_netPool.replaceAtOffset(0x1C, int_type, 4, "clLg2Min", "cluster log2 minimum size")
-vx_5_netPool.replaceAtOffset(0x20, int_type, 4, "clSizeMin", "minimum cluster size")
-vx_5_netPool.replaceAtOffset(0x24, vx_5_clTbl_array_data_type, vx_5_clTbl_array_data_type.getLength(), "clTbl", "pool table")
-vx_5_netPool.replaceAtOffset(0x50, void_ptr_type, 4, "pPoolStat", "pool statistics")
-vx_5_netPool.replaceAtOffset(0x54, void_ptr_type, 4, "pFuncTbl", "ptr to function ptr table")
 
 function_name_chaset = string.letters
 function_name_chaset += string.digits
@@ -563,6 +335,14 @@ def get_symbol(symbol_name, symbom_prefix="_"):
     return symbol
 
 
+def get_function(function_name, function_prefix="_"):
+    function = getFunction(function_name)
+    if not function and function_prefix:
+        function = getFunction("{}{}".format(function_prefix, function_name))
+
+    return function
+
+
 def fix_symbol_by_chains(head, tail, vx_version):
     symbol_interval = 0x10
     dt = vx_5_symtbl_dt
@@ -604,13 +384,47 @@ def create_struct(data_address, data_struct, overwrite=True):
         return
 
 
+def fix_cl_buff_chain(cl_buff_addr, vx_version=5):
+    if vx_version == 5:
+        if cl_buff_addr.offset == 0:
+            return
+
+        next_cl_buff_addr = cl_buff_addr
+        while True:
+            if is_address_in_current_program(next_cl_buff_addr):
+                create_struct(next_cl_buff_addr, vx_5_cl_buff)
+            else:
+                return
+
+            next_cl_buff_addr = toAddr(getInt(next_cl_buff_addr))
+            if next_cl_buff_addr == cl_buff_addr:
+                return
+
+
 def fix_clpool(clpool_addr, vx_version=5):
+    cl_pool_info = {
+        "cl_pool_addr": clpool_addr.getOffset(),
+        "cl_pool_size": None,
+        "cl_pool_num": None,
+        "cl_pool_num_free": None,
+        "cl_pool_usage": None,
+        "cl_head_addr": None,
+
+    }
     if vx_version == 5:
         if clpool_addr.offset == 0:
             return
 
         if is_address_in_current_program(clpool_addr):
             create_struct(clpool_addr, vx_5_clPool)
+            cl_head_addr = toAddr(getInt(clpool_addr.add(0x14)))
+            cl_pool_info["cl_pool_size"] = getInt(clpool_addr.add(0x00))
+            cl_pool_info["cl_pool_num"] = getInt(clpool_addr.add(0x08))
+            cl_pool_info["cl_pool_num_free"] = getInt(clpool_addr.add(0x0c))
+            cl_pool_info["cl_pool_usage"] = getInt(clpool_addr.add(0x10))
+            cl_pool_info["cl_head_addr"] = cl_head_addr.getOffset()
+            fix_cl_buff_chain(cl_head_addr)
+            return cl_pool_info
 
 
 def fix_pool_func_tbl(pool_func_addr, vx_version=5):
@@ -625,7 +439,7 @@ def fix_pool_func_tbl(pool_func_addr, vx_version=5):
         for func_name in vx_5_pool_func_dict:
             func_addr = toAddr(getInt(pool_func_addr.add(func_offset)))
             if is_address_in_current_program(func_addr):
-                print("Create function {} at {:#010x}".format(func_name, func_addr.getOffset()))
+                logger.debug("Create function {} at {:#010x}".format(func_name, func_addr.getOffset()))
                 disassemble(func_addr)
                 function = createFunction(func_addr, func_name)
                 if function:
@@ -639,19 +453,72 @@ def fix_pool_func_tbl(pool_func_addr, vx_version=5):
 
 
 def fix_netpool(netpool_addr, vx_version=5):
+    net_pool_info = {
+        "pool_addr": netpool_addr.getOffset(),
+        "pool_table_addr": None,
+        "pool_status_addr": None,
+        "pool_func_tbl_addr": None,
+        "cl_pool_info": [],
+    }
     if vx_version == 5:
-        create_struct(netpool_addr, vx_5_netPool)
+        create_struct(netpool_addr, vx_5_net_pool)
         pool_table_addr = netpool_addr.add(0x24)
-        print("Found ClPool table at {:#010x}".format(pool_table_addr.getOffset()))
-        pool_status_ptr = netpool_addr.add(0x50)
-        print("Found PoolStat at {:#010x}".format(pool_status_ptr.getOffset()))
-        pool_function_tbl_prt = netpool_addr.add(0x54)
-        print("Found pFuncTbl at {:#010x}".format(pool_function_tbl_prt.getOffset()))
+        logger.info("Found ClPool table at {:#010x}".format(pool_table_addr.getOffset()))
+        net_pool_info["pool_table_addr"] = pool_table_addr.getOffset()
+        pool_status_addr = toAddr(getInt(netpool_addr.add(0x50)))
+        logger.info("Found PoolStat at {:#010x}".format(pool_status_addr.getOffset()))
+        net_pool_info["pool_status_addr"] = pool_table_addr.getOffset()
+        pool_function_tbl_addr = toAddr(getInt(netpool_addr.add(0x54)))
+        logger.info("Found pFuncTbl at {:#010x}".format(pool_function_tbl_addr.getOffset()))
+        net_pool_info["pool_func_tbl_addr"] = pool_function_tbl_addr.getOffset()
 
         for i in range(VX_5_CL_TBL_SIZE):
             offset = i * 0x04
             cl_pool_addr = toAddr(getInt(pool_table_addr.add(offset)))
-            fix_clpool(cl_pool_addr, vx_version)
+            cl_pool_info = fix_clpool(cl_pool_addr, vx_version)
+            if cl_pool_info:
+                net_pool_info["cl_pool_info"].append(cl_pool_info)
 
-        create_struct(toAddr(getInt(pool_status_ptr)), vx_5_pool_stat)
-        fix_pool_func_tbl(toAddr(getInt(pool_function_tbl_prt)), vx_version)
+        create_struct(pool_status_addr, vx_5_pool_stat)
+        fix_pool_func_tbl(pool_function_tbl_addr, vx_version)
+
+    return net_pool_info
+
+
+def fix_tcb(tcb_addr, vx_version=5):
+    tcb_info = {
+        "tcb_addr": tcb_addr.getOffset(),
+        "task_name": None,
+        "task_entry_addr": None,
+        "task_entry_name": None,
+        "task_stack_base": None,
+        "task_stack_limit": None,
+        "task_stack_limit_end": None,
+    }
+    if vx_version == 5:
+        create_struct(tcb_addr, vx_5_wind_tcb)
+        task_name_ptr = tcb_addr.add(0x34)
+        task_name_addr = toAddr(getInt(task_name_ptr))
+        task_name = getDataAt(task_name_addr)
+        logger.info("Task name is {}".format(task_name))
+        tcb_info["task_name"] = task_name
+        task_entry_ptr = tcb_addr.add(0x74)
+        task_entry_addr = toAddr(getInt(task_entry_ptr))
+        tcb_info["task_entry_addr"] = task_entry_addr.getOffset()
+        logger.info("Task entry addr is {:#010x}".format(task_entry_addr.getOffset()))
+        task_entry_name = getFunctionAt(task_entry_addr)
+        tcb_info["task_entry_name"] = task_entry_name
+        logger.info("Task entry name is {}".format(task_entry_name))
+        task_stack_base_ptr = tcb_addr.add(0x78)
+        task_stack_base = toAddr(getInt(task_stack_base_ptr))
+        tcb_info["task_stack_base"] = task_stack_base.getOffset()
+        logger.info("Task stack_base is {:#010x}".format(task_stack_base.getOffset()))
+        task_stack_limit_ptr = tcb_addr.add(0x7c)
+        task_stack_limit = toAddr(getInt(task_stack_limit_ptr))
+        tcb_info["task_stack_limit"] = task_stack_limit.getOffset()
+        logger.info("Task stack_limit is {:#010x}".format(task_stack_limit.getOffset()))
+        task_stack_limit_end_ptr = tcb_addr.add(0x80)
+        task_stack_limit_end = toAddr(getInt(task_stack_limit_end_ptr))
+        tcb_info["task_stack_limit_end"] = task_stack_limit_end.getOffset()
+        logger.info("Task stack limit end is {:#010x}".format(task_stack_limit_end.getOffset()))
+        return tcb_info
