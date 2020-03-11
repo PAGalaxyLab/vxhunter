@@ -13,7 +13,19 @@ from common import demangler
 from common import is_address_in_current_program
 
 from ghidra.program.model.util import CodeUnitInsertionException
-from ghidra.program.model.data import (CharDataType, UnsignedIntegerDataType, IntegerDataType, UnsignedLongDataType, ShortDataType, PointerDataType, VoidDataType, ByteDataType, ArrayDataType, StructureDataType, EnumDataType)
+from ghidra.program.model.data import (
+    ArrayDataType,
+    ByteDataType,
+    CharDataType,
+    EnumDataType,
+    IntegerDataType,
+    PointerDataType,
+    ShortDataType,
+    StructureDataType,
+    UnsignedIntegerDataType,
+    UnsignedLongDataType,
+    VoidDataType
+)
 from ghidra.program.model.symbol import RefType, SourceType
 
 # The Python module that Ghidra directly launches is always called __main__.  If we import
@@ -251,9 +263,66 @@ function_name_chaset += string.digits
 function_name_chaset += "_:.<>,*"  # For C++
 function_name_chaset += "()~+-=/%"  # For C++ special eg operator+(ZafBignumData const &,long)
 ghidra_builtin_types = [
-    'undefined', 'byte', 'uint', 'ushort', 'bool', 'complex16', 'complex32', 'complex8', 'doublecomplex', 'dwfenc', 'dword', 'filetime', 'float10', 'float16', 'float2', 'float4', 'float8', 'floatcomplex', 'guid', 'imagebaseoffset32', 'imagebaseoffset64',
-    'int16', 'int3', 'int5', 'int6', 'int7', 'long', 'longdouble', 'longdoublecomplex', 'longlong', 'mactime', 'prel31', 'qword', 'sbyte', 'schar', 'sdword', 'segmentedcodeaddress', 'shiftedaddress', 'sqword', 'sword', 'wchar16', 'wchar32', 'uchar',
-    'uint16', 'uint3', 'uint5', 'uint6', 'uint7', 'ulong', 'ulonglong', 'undefined1', 'undefined2', 'undefined3', 'undefined4', 'undefined5', 'undefined6', 'undefined7', 'undefined8', 'wchar_t', 'word'
+    'bool',
+    'byte',
+    'complex16',
+    'complex32',
+    'complex8',
+    'doublecomplex',
+    'dwfenc',
+    'dword',
+    'filetime',
+    'float10',
+    'float16',
+    'float2',
+    'float4',
+    'float8',
+    'floatcomplex',
+    'guid',
+    'imagebaseoffset32',
+    'imagebaseoffset64',
+    'int16',
+    'int3',
+    'int5',
+    'int6',
+    'int7',
+    'long',
+    'longdouble',
+    'longdoublecomplex',
+    'longlong',
+    'mactime',
+    'prel31',
+    'qword',
+    'sbyte',
+    'schar',
+    'sdword',
+    'segmentedcodeaddress',
+    'shiftedaddress',
+    'sqword',
+    'sword',
+    'uchar',
+    'uint',
+    'uint16',
+    'uint3',
+    'uint5',
+    'uint6',
+    'uint7',
+    'ulong',
+    'ulonglong',
+    'undefined',
+    'undefined1',
+    'undefined2',
+    'undefined3',
+    'undefined4',
+    'undefined5',
+    'undefined6',
+    'undefined7',
+    'undefined8',
+    'ushort',
+    'wchar_t',
+    'wchar16',
+    'wchar32',
+    'word'
 ]
 
 
@@ -382,14 +451,13 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
     if symbol_name_address:
         symbol_name_address = toAddr(symbol_name_address)
         logger.debug("Have symbol name {} at address {}.".format(symbol_name_string, symbol_name_address))
-        # There might be a problem here. It seems like we're getting exceptions because bogus data exists at locations that
-        # never gets removed because this code doesn't run...
+
         try:
             symbol_name_string = createAsciiString(symbol_name_address).getValue()
             logger.debug("Created ascii string {} at {}.".format(symbol_name_string, symbol_name_address))
         except CodeUnitInsertionException as err:
             logger.error("Failed to create ascii string for symbol named {} at {}: {}".format(symbol_name, symbol_name_address, err))
-        except Exception as err:
+        except BaseException as err:
             logger.error("Failed to create ascii string for symbol named {} at {}: {}; returning.".format(symbol_name, symbol_name_address, err))
             return
 

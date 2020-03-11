@@ -285,12 +285,8 @@ class VxTarget(object):
         :param c: char to check.
         :return: True if char is printable, False otherwise.
         """
-        try:
-            # Not python 3 compatible
-            c.decode('ascii')
-            return True
-        except UnicodeDecodeError:
-            return False
+
+        return 32 <= ord(c) <= 126
 
     def _is_func_name(self, string):
         """ Check target string is match function name format.
@@ -303,7 +299,7 @@ class VxTarget(object):
         # If any of the data matches a predefined regex of bad characters, or if any character in the string is unprintable, or if its length is over
         # 512, we must return False.
 
-        return len(string) <= 512 and not re.search(r'.*[\\%\+,&\/\)\(\[\]].*', string) and self._is_printable(string)
+        return len(string) <= 512 and not re.search(r'.*[\\%\+,&\/\)\(\[\]].*', string) and all(self._is_printable(x) for x in string)
 
     def _get_prev_string_data(self, offset):
         """ Get previous string from giving offset.
@@ -543,11 +539,6 @@ class VxTarget(object):
 
         str_start_address, str_end_address = self.find_string_table_by_key_function_index(key_function_index)
         self.get_string_table(str_start_address, str_end_address)
-        import json
-        with open('/Users/mydriasis/Desktop/symbol_table.log', 'w') as file_handle:
-            file_handle.write(json.dumps(self._symbol_table))
-        with open('/Users/mydriasis/Desktop/string_table.log', 'w') as file_handle:
-            file_handle.write(json.dumps(self._string_table))
 
         # TODO: Need improve performance
         self.logger.info("Starting loading address analysis")
