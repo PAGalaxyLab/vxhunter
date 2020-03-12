@@ -7,11 +7,9 @@ import struct
 import logging
 import time
 
-
 # The Python module that Ghidra directly launches is always called __main__.  If we import
 # everything from that module, this module will behave as if Ghidra directly launched it.
 from __main__ import *
-
 
 debug = False
 process_is_64bit = False
@@ -33,11 +31,9 @@ if endian == u'Big':
 else:
     is_big_endian = False
 
-
 process_type = currentProgram.domainFile.getMetadata()[u'Processor']
 if process_type.endswith(u'64'):
     process_is_64bit = True
-
 
 demangler = GnuDemangler()
 listing = currentProgram.getListing()

@@ -1,19 +1,19 @@
 # coding=utf-8
 from ghidra.program.model.data import (
-    CharDataType,
-    UnsignedIntegerDataType,
-    UnsignedInteger16DataType,
-    IntegerDataType,
-    Integer16DataType,
-    UnsignedLongDataType,
-    ShortDataType,
-    UnsignedShortDataType,
-    PointerDataType,
-    VoidDataType,
-    ByteDataType,
     ArrayDataType,
+    ByteDataType,
+    CharDataType,
+    EnumDataType,
+    Integer16DataType,
+    IntegerDataType,
+    PointerDataType,
+    ShortDataType,
     StructureDataType,
-    EnumDataType
+    UnsignedInteger16DataType,
+    UnsignedIntegerDataType,
+    UnsignedLongDataType,
+    UnsignedShortDataType,
+    VoidDataType
 )
 
 

@@ -1,37 +1,42 @@
 # coding=utf-8
+
+import logging
+import string
+import struct
+import sys
+
+# Constants from common
+from common import can_demangle
+# Objects from common
+from common import demangler
+# Functions from common
+from common import is_address_in_current_program
+
 from ghidra.program.model.util import CodeUnitInsertionException
 from ghidra.program.model.symbol import RefType, SourceType
-from common import *
 from vx_structs import *
-import string
 
 
 # The Python module that Ghidra directly launches is always called __main__.  If we import
 # everything from that module, this module will behave as if Ghidra directly launched it.
 from __main__ import *
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 function_name_key_words = ['bzero', 'usrInit', 'bfill']
 
-need_create_function = [
-    0x04,
-    0x05
-]
+need_create_function = [0x04, 0x05]
 
 # Prepare VxWorks symbol types
-
-
 
 function_name_chaset = string.letters
 function_name_chaset += string.digits
 function_name_chaset += "_:.<>,*"  # For C++
 function_name_chaset += "()~+-=/%"  # For C++ special eg operator+(ZafBignumData const &,long)
 ghidra_builtin_types = [
-    'undefined',
-    'byte',
-    'uint',
-    'ushort',
     'bool',
+    'byte',
     'complex16',
     'complex32',
     'complex8',
@@ -67,9 +72,8 @@ ghidra_builtin_types = [
     'shiftedaddress',
     'sqword',
     'sword',
-    'wchar16',
-    'wchar32',
     'uchar',
+    'uint',
     'uint16',
     'uint3',
     'uint5',
@@ -77,6 +81,7 @@ ghidra_builtin_types = [
     'uint7',
     'ulong',
     'ulonglong',
+    'undefined',
     'undefined1',
     'undefined2',
     'undefined3',
@@ -85,7 +90,10 @@ ghidra_builtin_types = [
     'undefined6',
     'undefined7',
     'undefined8',
+    'ushort',
     'wchar_t',
+    'wchar16',
+    'wchar32',
     'word'
 ]
 
@@ -185,21 +193,25 @@ def demangled_symbol(symbol_string):
                 sym_demangled = demangler.demangle(symbol_string, False)
 
         except DemangledException as err:
-            logger.debug("DemangledException: symbol_string: {}, reason:{}".format(symbol_string, err))
+            logger.debug("First pass demangling failed: symbol_string: {}, reason: {}".format(symbol_string, err))
+            pass
 
-        try:
-            if not sym_demangled:
+        if not sym_demangled:
+            try:
                 # Temp fix to handle _ prefix function name by remove _ prefix before demangle
                 sym_demangled = demangler.demangle(symbol_string[1:], False)
 
-        except DemangledException as err:
-            logger.debug("DemangledException: symbol_string: {}, reason:{}".format(symbol_string, err))
+            except DemangledException as err:
+                logger.debug("Second pass demangling failed: symbol_string: {}, reason:{}".format(symbol_string, err))
+                pass
 
         if sym_demangled:
             sym_demangled_name = sym_demangled.getSignature(False)
 
-        if sym_demangled_name:
-            logger.debug("sym_demangled_name: {}".format(sym_demangled_name))
+            if sym_demangled_name:
+                logger.debug("sym_demangled_name: {}".format(sym_demangled_name))
+            else:
+                logger.debug("Demangled symbol name for string {} is None.".format(symbol_string))
 
     return sym_demangled_name
 
@@ -207,27 +219,33 @@ def demangled_symbol(symbol_string):
 def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
     symbol_address = toAddr(symbol_address)
     symbol_name_string = symbol_name
-
     # Get symbol_name
     if symbol_name_address:
         symbol_name_address = toAddr(symbol_name_address)
+        logger.debug("Have symbol name {} at address {}.".format(symbol_name_string, symbol_name_address))
+
         if getDataAt(symbol_name_address):
-            logger.debug("removeDataAt: {}".format(symbol_name_address))
+            logger.debug("Data detected at {}; removing to make room for symbol {}".format(symbol_name_address, symbol_name))
             removeDataAt(symbol_name_address)
+        else:
+            logger.debug("No data detected at {}. Moving on...".format(symbol_address))
+
 
         try:
             symbol_name_string = createAsciiString(symbol_name_address).getValue()
-            logger.debug("symbol_name_string: {}".format(symbol_name_string))
-
+            logger.debug("Created ascii string {} at {}.".format(symbol_name_string, symbol_name_address))
         except CodeUnitInsertionException as err:
-            logger.error("Got CodeUnitInsertionException: {}".format(err))
-
-        except:
+            logger.error("Failed to create ascii string for symbol named {} at {}: {}".format(symbol_name, symbol_name_address, err))
+        except BaseException as err:
+            logger.error("Failed to create ascii string for symbol named {} at {}: {}; returning.".format(symbol_name, symbol_name_address, err))
             return
 
+
     if getInstructionAt(symbol_address):
-        logger.debug("removeInstructionAt: {}".format(symbol_address))
+        logger.debug("Instruction detected at {}; removing to make room for symbol {}".format(symbol_address, symbol_name))
         removeInstructionAt(symbol_address)
+    else:
+        logger.debug("No instruction detected at {}. Moving on...".format(symbol_address))
 
     # Demangle symName
     try:
@@ -235,8 +253,7 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
         sym_demangled_name = demangled_symbol(symbol_name_string)
 
         if symbol_name_string and (symbol_type in need_create_function):
-            logger.debug("Start disassemble function {} at address {}".format(symbol_name_string,
-                                                                              symbol_address.toString()))
+            logger.debug("Start disassemble function {} at address {}".format(symbol_name_string, symbol_address.toString()))
             disassemble(symbol_address)
             function = createFunction(symbol_address, symbol_name_string)
             if function:
@@ -246,21 +263,28 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
                 # Add original symbol name
                 createLabel(symbol_address, symbol_name_string, True)
 
+            logger.debug("function: {}; sym_demangled_name: {}".format(function, sym_demangled_name))
+
             if function and sym_demangled_name:
                 # Add demangled string to comment
                 codeUnit = listing.getCodeUnitAt(symbol_address)
                 codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
                 # Rename function
+                # TODO: demangle_function can probably be replaced. Function objects in the Ghidra API have each
+                # of .getName(), .getParameters, and .getReturn.
                 function_return, function_name, function_parameters = demangle_function(sym_demangled_name)
+
                 logger.debug("Demangled function name is: {}".format(function_name))
                 logger.debug("Demangled function return is: {}".format(function_return))
                 logger.debug("Demangled function parameters is: {}".format(function_parameters))
 
                 if function_name:
                     function.setName(function_name, SourceType.USER_DEFINED)
-                    # Todo: Add parameters later
+                    # TODO: Add parameters later
                 # Add original symbol name
                 createLabel(symbol_address, symbol_name_string, True)
+            if function is None and sym_demangled_name is not None:
+                logger.debug('Function for symbol {} was None. In createFunction, one or more functions overlapped the specified address set.'.format(sym_demangled_name))
 
         else:
             createLabel(symbol_address, symbol_name_string, True)
@@ -269,18 +293,7 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
                 codeUnit.setComment(codeUnit.PLATE_COMMENT, sym_demangled_name)
 
     except Exception as err:
-        logger.error("Create symbol failed: symbol_name:{}, symbol_name_address:{}, "
-                     "symbol_address:{}, symbol_type:{} reason: {}".format(symbol_name_string,
-                                                                           symbol_name_address,
-                                                                           symbol_address,
-                                                                           symbol_type, err))
-
-    except:
-        logger.debug("Create symbol failed: symbol_name:{}, symbol_name_address:{}, "
-                     "symbol_address{}, symbol_type{} with Unknown error".format(symbol_name_string,
-                                                                                 symbol_name_address,
-                                                                                 symbol_address,
-                                                                                 symbol_type))
+        logger.error("Create symbol failed: symbol_name: {}, symbol_name_address: {}, symbol_address: {}, symbol_type: {} reason: {}".format(symbol_name_string, symbol_name_address, symbol_address, symbol_type, err))
 
 
 def fix_symbol_table_structs(symbol_table_start, symbol_table_end, vx_version):
@@ -294,8 +307,8 @@ def fix_symbol_table_structs(symbol_table_start, symbol_table_end, vx_version):
     symbol_table_start_addr = toAddr(symbol_table_start)
     symbol_table_end_addr = toAddr(symbol_table_end)
 
-    ea = symbol_table_start_addr
     sym_length = (symbol_table_end - symbol_table_start) // symbol_interval
+    logger.debug("Fixing symbol table with start at {} and end at {} with length {}.".format(symbol_table_start_addr, symbol_table_end_addr, sym_length))
     createLabel(symbol_table_start_addr, "vxSymTbl", True)
     clearListing(symbol_table_start_addr, symbol_table_end_addr)
     vx_symbol_array_data_type = ArrayDataType(dt, sym_length, dt.getLength())
@@ -317,11 +330,11 @@ def is_vx_symbol_file(file_data, is_big_endian=True):
 
 
 def get_symbol(symbol_name, symbom_prefix="_"):
-        symbol = getSymbol(symbol_name, currentProgram.getGlobalNamespace())
-        if not symbol and symbom_prefix:
-            symbol = getSymbol("{}{}".format(symbom_prefix, symbol_name), currentProgram.getGlobalNamespace())
+    symbol = getSymbol(symbol_name, currentProgram.getGlobalNamespace())
+    if not symbol and symbom_prefix:
+        symbol = getSymbol("{}{}".format(symbom_prefix, symbol_name), currentProgram.getGlobalNamespace())
 
-        return symbol
+    return symbol
 
 
 def get_function(function_name, function_prefix="_"):

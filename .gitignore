@@ -107,3 +107,4 @@ venv.bak/
 
 # others
 .editorconfig
+setup.cfg
