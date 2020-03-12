@@ -224,6 +224,13 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
         symbol_name_address = toAddr(symbol_name_address)
         logger.debug("Have symbol name {} at address {}.".format(symbol_name_string, symbol_name_address))
 
+        if getDataAt(symbol_name_address):
+            logger.debug("Data detected at {}; removing to make room for symbol {}".format(symbol_name_address, symbol_name))
+            removeDataAt(symbol_name_address)
+        else:
+            logger.debug("No data detected at {}. Moving on...".format(symbol_address))
+
+
         try:
             symbol_name_string = createAsciiString(symbol_name_address).getValue()
             logger.debug("Created ascii string {} at {}.".format(symbol_name_string, symbol_name_address))
@@ -233,11 +240,6 @@ def add_symbol(symbol_name, symbol_name_address, symbol_address, symbol_type):
             logger.error("Failed to create ascii string for symbol named {} at {}: {}; returning.".format(symbol_name, symbol_name_address, err))
             return
 
-        if getDataAt(symbol_name_address):
-            logger.debug("Data detected at {}; removing to make room for symbol {}".format(symbol_name_address, symbol_name))
-            removeDataAt(symbol_name_address)
-        else:
-            logger.debug("No data detected at {}. Moving on...".format(symbol_address))
 
     if getInstructionAt(symbol_address):
         logger.debug("Instruction detected at {}; removing to make room for symbol {}".format(symbol_address, symbol_name))
