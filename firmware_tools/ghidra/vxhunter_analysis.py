@@ -8,25 +8,24 @@ from vxhunter_utility.common import create_initialized_block
 from ghidra.program.model.symbol import RefType, SourceType
 
 
-
-logger = logging.getLogger(__name__)
-logger.propagate = False
-logger.setLevel(logging.INFO)
-consolehandler = logging.StreamHandler()
-console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
-consolehandler.setFormatter(console_format)
-logger.addHandler(consolehandler)
-
 class VxAnalyzer(object):
     def __init__(self):
         self._vx_version = None
         self.report = []
 
-
+        if logger is None:	
+            self.logger = logging.getLogger('target')	
+            self.logger.setLevel(logging.INFO)	
+            consolehandler = logging.StreamHandler()	
+            console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')	
+            consolehandler.setFormatter(console_format)	
+            self.logger.addHandler(consolehandler)	
+        else:	
+            self.logger = logger
 
     def analyze_bss(self):
         self.report.append('{:-^60}'.format('analyze bss info'))
-        logger.info("Start analyze bss info")
+        self.logger.info("Start analyze bss info")
         target_function = get_function("bzero")
         if target_function:
             parms_data = dump_call_parm_value(call_address=target_function.getEntryPoint(), search_functions=['sysStart',
@@ -46,15 +45,15 @@ class VxAnalyzer(object):
                     break
                 self.report.append("bss_end_address: {}".format(hex(bss_start_address + bss_length - 1)))
                 self.report.append("bss_length: {}".format(hex(bss_length)))
-                logger.info("bss_end_address: {}".format(hex(bss_start_address + bss_length - 1)))
-                logger.info("bss_length: {}".format(hex(bss_length)))
+                self.logger.info("bss_end_address: {}".format(hex(bss_start_address + bss_length - 1)))
+                self.logger.info("bss_length: {}".format(hex(bss_length)))
                 if not is_address_in_current_program(toAddr(bss_start_address)):
                     self.report.append("bss block not in current program, adding...")
                     if create_initialized_block(block_name=".bss", start_address=toAddr(bss_start_address),
                                                 length=bss_length):
-                        logger.info("bss block created")
+                        self.logger.info("bss block created")
                     else:
-                        logger.info("Can't create bss block, you can create it manually")
+                        self.logger.info("Can't create bss block, you can create it manually")
 
         else:
             logger.error("Can't find bzero function in firmware")
@@ -63,7 +62,7 @@ class VxAnalyzer(object):
 
     def analyze_login_accouts(self):
         hard_coded_accounts = {}
-        logger.info("analyze loginUserAdd function")
+        self.logger.info("analyze loginUserAdd function")
         self.report.append("{:-^60}".format("analyze loginUserAdd function"))
         target_function = get_function("loginUserAdd")
         if target_function:
@@ -93,7 +92,7 @@ class VxAnalyzer(object):
                         parm_data_string += "{}({}), ".format(parm_data, parm_value)
                 # remove end ', '
                 parm_data_string = parm_data_string.strip(', ')
-                logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, parm_data_string,
+                self.logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, parm_data_string,
                                                                          call_parms['call_addr'].offset,
                                                                          call_parms['refrence_function_name'],
                                                                          call_parms['refrence_function_addr'].offset
@@ -101,10 +100,10 @@ class VxAnalyzer(object):
         else:
             self.report.append("Can't find loginUserAdd function in firmware")
 
-        logger.info("Found {} hard coded accounts".format(len(hard_coded_accounts)))
+        self.logger.info("Found {} hard coded accounts".format(len(hard_coded_accounts)))
         self.report.append("Found {} hard coded accounts".format(len(hard_coded_accounts)))
         for account in hard_coded_accounts:
-            logger.info("user_name: {}, pass_hash: {}, added at address: {}".format(
+            self.logger.info("user_name: {}, pass_hash: {}, added at address: {}".format(
                 hard_coded_accounts[account]['user_name'],
                 hard_coded_accounts[account]['pass_hash'],
                 hex(account.offset)
@@ -119,7 +118,7 @@ class VxAnalyzer(object):
 
     def analyze_service(self):
         service_status = {}
-        logger.info('analyze services')
+        self.logger.info('analyze services')
         self.report.append('{:-^60}'.format('analyze services'))
 
         for service in sorted(vxworks_service_keyword.keys()):
@@ -131,12 +130,12 @@ class VxAnalyzer(object):
                     service_status[service] = "available"
 
         for service in sorted(service_status.items(), key=lambda x: x[1], reverse=True):
-            logger.info('{}: {}'.format(service[0], service[1]))
+            self.logger.info('{}: {}'.format(service[0], service[1]))
             self.report.append('{}: {}'.format(service[0], service[1]))
         self.report.append('{}\r\n'.format("-" * 60))
 
     def analyze_symbols(self):
-        logger.info('analyze symbols using sysSymTbl')
+        self.logger.info('analyze symbols using sysSymTbl')
         self.report.append('{:-^60}'.format('analyze symbols using sysSymTbl'))
         function_manager = currentProgram.getFunctionManager()
         functions_count_before = function_manager.getFunctionCount()
@@ -153,7 +152,7 @@ class VxAnalyzer(object):
         sys_sym_addr = toAddr(getInt(sys_sym_tbl.getAddress()))
 
         if not is_address_in_current_program(sys_sym_addr):
-            logger.info("sys_sym_addr({:#010x}) is not in current_program".format(sys_sym_addr.getOffset()))
+            self.logger.info("sys_sym_addr({:#010x}) is not in current_program".format(sys_sym_addr.getOffset()))
             self.report.append("sys_sym_addr({:#010x}) is not in current_program".format(sys_sym_addr.getOffset()))
             self.report.append('{}\r\n'.format("-" * 60))
             return
@@ -171,10 +170,10 @@ class VxAnalyzer(object):
 
                     elif vx_version == u"6.x":
                         self._vx_version = 6
-                        logger.info(("VxHunter didn't support symbols analyze for VxWorks version 6.x"))
+                        self.logger.info(("VxHunter didn't support symbols analyze for VxWorks version 6.x"))
 
                 if self._vx_version == 5:
-                    logger.info(("Functions count: {}(Before analyze) ".format(functions_count_before)))
+                    self.logger.info(("Functions count: {}(Before analyze) ".format(functions_count_before)))
                     self.report.append("Functions count: {}(Before analyze) ".format(functions_count_before))
                     create_struct(sys_sym_addr, vx_5_sys_symtab)
                     hash_tbl_addr = toAddr(getInt(sys_sym_addr.add(0x04)))
@@ -183,7 +182,7 @@ class VxAnalyzer(object):
                     hash_tbl_array_addr = toAddr(getInt(hash_tbl_addr.add(0x14)))
                     hash_tbl_array_data_type = ArrayDataType(vx_5_sl_list, hash_tbl_length, vx_5_sl_list.getLength())
                     create_struct(hash_tbl_array_addr, hash_tbl_array_data_type)
-                    logger.info("Start fix functions")
+                    self.logger.info("Start fix functions")
                     for i in range(0, hash_tbl_length):
                         list_head = toAddr(getInt(hash_tbl_array_addr.add(i * 8)))
                         list_tail = toAddr(getInt(hash_tbl_array_addr.add((i * 8) + 0x04)))
@@ -194,11 +193,11 @@ class VxAnalyzer(object):
 
             finally:
                 # Wait analyze finish.
-                logger.info("Waiting for pending analysis to complete...")
+                self.logger.info("Waiting for pending analysis to complete...")
                 analyzeChanges(currentProgram)
                 functions_count_after = function_manager.getFunctionCount()
-                logger.info("Functions count: {}(After analyze) ".format(functions_count_after))
-                logger.info("VxHunter found {} new functions".format(
+                self.logger.info("Functions count: {}(After analyze) ".format(functions_count_after))
+                self.logger.info("VxHunter found {} new functions".format(
                     functions_count_after - functions_count_before))
                 self.report.append("Functions count: {}(After analyze) ".format(functions_count_after))
                 self.report.append("VxHunter found {} new functions".format(
@@ -206,7 +205,7 @@ class VxAnalyzer(object):
                 self.report.append('{}\r\n'.format("-" * 60))
 
     def analyze_function_xref_by_symbol_get(self):
-        logger.info('{:-^60}'.format('analyze symFindByName function call'))
+        self.logger.info('{:-^60}'.format('analyze symFindByName function call'))
         self.report.append('{:-^60}'.format('analyze symFindByName function call'))
 
         # symFindByName analyze
@@ -214,13 +213,13 @@ class VxAnalyzer(object):
 
         if target_function:
             parms_data = dump_call_parm_value(call_address=target_function.getEntryPoint())
-            logger.debug("Found {} symFindByName call".format(len(parms_data)))
-            logger.debug("parms_data.keys(): {}".format(parms_data.keys()))
+            self.logger.debug("Found {} symFindByName call".format(len(parms_data)))
+            self.logger.debug("parms_data.keys(): {}".format(parms_data.keys()))
             currentReferenceManager = currentProgram.getReferenceManager()
             for call_addr in parms_data:
                 try:
                     call_parms = parms_data[call_addr]
-                    logger.debug("call_parms: {}".format(call_parms))
+                    self.logger.debug("call_parms: {}".format(call_parms))
                     if 'parm_2' not in call_parms['parms'].keys():
                         continue
 
@@ -230,11 +229,11 @@ class VxAnalyzer(object):
                         if isinstance(searched_symbol_name, GenericAddress):
                             if is_address_in_current_program(searched_symbol_name):
                                 searched_symbol_name = getDataAt(searched_symbol_name)
-                        logger.debug("type(searched_symbol_name): {}".format(type(searched_symbol_name)))
-                        logger.debug("searched_symbol_name: {}".format(searched_symbol_name))
+                        self.logger.debug("type(searched_symbol_name): {}".format(type(searched_symbol_name)))
+                        self.logger.debug("searched_symbol_name: {}".format(searched_symbol_name))
                         if isinstance(searched_symbol_name, unicode) is False:
                             searched_symbol_name = searched_symbol_name.value
-                        logger.info("Found symFindByName({}) call at {:#010x}".format(
+                        self.logger.info("Found symFindByName({}) call at {:#010x}".format(
                             searched_symbol_name, call_parms['call_addr'].offset))
                         self.report.append("Found symFindByName({}) call at {:#010x}".format(
                             searched_symbol_name, call_parms['call_addr'].offset))
@@ -246,7 +245,7 @@ class VxAnalyzer(object):
                             ref_from = call_parms['call_addr']
                             currentReferenceManager.addMemoryReference(ref_from, ref_to, RefType.READ,
                                                                        SourceType.USER_DEFINED, 0)
-                            logger.info("Add Reference for {}( {:#010x} ) function call at {:#010x} in {}( {:#010x} )".format(
+                            self.logger.info("Add Reference for {}( {:#010x} ) function call at {:#010x} in {}( {:#010x} )".format(
                                 to_function,
                                 ref_to.offset,
                                 call_parms['call_addr'].offset,
@@ -265,7 +264,7 @@ class VxAnalyzer(object):
                         else:
                             logger.error("Can't find {} symbol in firmware".format(searched_symbol_name))
 
-                        logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, searched_symbol_name,
+                        self.logger.debug("{}({}) at {:#010x} in {}({:#010x})".format(target_function.name, searched_symbol_name,
                                                                                  call_parms['call_addr'].offset,
                                                                                  call_parms['refrence_function_name'],
                                                                                  call_parms['refrence_function_addr'].offset
@@ -290,7 +289,7 @@ class VxAnalyzer(object):
             logger.error("VxHunter didn't support netpool analyze for VxWorks version 6.x")
             self.report.append("VxHunter didn't support netpool analyze for VxWorks version 6.x")
             return
-        logger.info('analyze netpool')
+        self.logger.info('analyze netpool')
         self.report.append('{:-^60}'.format('analyze netpool'))
         pools = ["_pNetDpool", "_pNetSysPool"]
         for pool in pools:
@@ -305,7 +304,7 @@ class VxAnalyzer(object):
             elif net_dpool_addr.getOffset() == 0:
                 pass
 
-            logger.info("Found {} at {:#010x}".format(pool, net_dpool_addr.getOffset()))
+            self.logger.info("Found {} at {:#010x}".format(pool, net_dpool_addr.getOffset()))
             self.report.append("Found {} at {:#010x}".format(pool, net_dpool_addr.getOffset()))
 
             try:
@@ -341,7 +340,7 @@ class VxAnalyzer(object):
         self.report.append('{}\r\n'.format("-" * 60))
 
     def analyze_active_task(self):
-        logger.info('analyze active task')
+        self.logger.info('analyze active task')
         self.report.append('{:-^60}'.format('analyze task'))
         active_qhead = get_symbol("activeQHead")
         if active_qhead:
