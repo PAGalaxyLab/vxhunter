@@ -37,7 +37,7 @@ class FlowNode(object):
         """
         self.var_node = var_node
         if logger is None:
-            self.logger = get_logger(self.__name__)
+            self.logger = get_logger(self.__class__.__name__)
         else:
             self.logger = logger
 

@@ -14,7 +14,7 @@ class VxAnalyzer(object):
         self.timer = Timer()
 
         if logger is None:
-            self.logger = get_logger(self.__name__)
+            self.logger = get_logger(self.__class__.__name__)
         else:
             self.logger = logger
 
@@ -342,6 +342,10 @@ class VxAnalyzer(object):
             create_struct(active_qhead_addr, vx_5_q_head)
             active_task_head_ptr = active_qhead_addr.add(0x04)
             active_task_head = toAddr(getInt(active_task_head_ptr))
+            if not is_address_in_current_program(active_task_head):
+                self.report.append('{}\r\n'.format("-" * 60))
+                return
+
             tcb_addr = active_task_head.add(-0x20)
             first_tcb_addr = tcb_addr
 
@@ -375,7 +379,7 @@ class VxAnalyzer(object):
             print(line)
 
         # Print timer
-        print('{:-^60} timer'.format(__name__))
+        print('{:-^60}'.format(self.__class__.__name__ + " timer"))
         for line in self.timer_log:
             print(line)
         print('{}\r\n'.format("-" * 60))
