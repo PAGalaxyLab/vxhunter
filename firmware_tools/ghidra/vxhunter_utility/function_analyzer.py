@@ -48,6 +48,16 @@ class FlowNode(object):
         """
         if self.var_node.isAddress():
             self.logger.debug("Var_node isAddress")
+            # TODO: Return pointer value is address is pointer, this might cause some bug, need more test.
+            # try:
+            #     if getDataAt(self.var_node.getAddress()).isPointer():
+            #         self.logger.info("Var_node address is pointer")
+            #         return getDataAt(self.var_node.getAddress()).getValue().offset
+            #
+            # except BaseException as err:
+            #     self.logger.err(err)
+            #     return self.var_node.getAddress()
+            #
             return self.var_node.getAddress()
         elif self.var_node.isConstant():
             self.logger.debug("Var_node isConstant")
@@ -57,6 +67,7 @@ class FlowNode(object):
             return calc_pcode_op(self.var_node.getDef())
         elif self.var_node.isRegister():
             self.logger.debug("Var_node isRegister")
+            self.logger.debug(self.var_node.getDef())
             return calc_pcode_op(self.var_node.getDef())
         elif self.var_node.isPersistant():
             self.logger.debug("Var_node isPersistant")
@@ -87,6 +98,8 @@ def calc_pcode_op(pcode):
                 return value_1.offset + value_2.offset
 
             else:
+                logger.debug("value_1: {}".format(value_1))
+                logger.debug("value_2: {}".format(value_2))
                 return None
 
         elif opcode == PcodeOp.CAST:
@@ -172,12 +185,7 @@ class FunctionAnalyzer(object):
         self.function = function
         self.timeout = timeout
         if logger is None:
-            self.logger = logging.getLogger('target')
-            self.logger.setLevel(logging.INFO)
-            consolehandler = logging.StreamHandler()
-            console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
-            consolehandler.setFormatter(console_format)
-            self.logger.addHandler(consolehandler)
+            self.logger = get_logger("FunctionAnalyzer")
         else:
             self.logger = logger
         self.hfunction = None
@@ -273,17 +281,20 @@ class FunctionAnalyzer(object):
             opcode = pcodeOpAST.getOpcode()
             if opcode == PcodeOp.CALL:
                 target_call_addr = pcodeOpAST.getInput(0).getAddress()
+                self.logger.debug("target_call_addr: {}".format(target_call_addr))
 
             elif opcode == PcodeOp.CALLIND:
                 target_call_addr = FlowNode(pcodeOpAST.getInput(0)).get_value()
                 self.logger.debug("target_call_addr: {}".format(target_call_addr))
-            # self.logger.debug("Calling {}(0x{}) ".format(getFunctionAt(toAddr(target_call_addr)), target_call_addr))
+
             inputs = pcodeOpAST.getInputs()
             for i in range(len(inputs))[1:]:
                 parm = inputs[i]
                 self.logger.debug("parm{}: {}".format(i, parm))
                 parm_node = FlowNode(parm)
+                self.logger.debug("parm_node: {}".format(parm_node))
                 parm_value = parm_node.get_value()
+                self.logger.debug("parm_value: {}".format(parm_value))
                 if isinstance(parm_value, GenericAddress):
                     parm_value = parm_value.offset
                 parms[i] = parm_value

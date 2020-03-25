@@ -18,6 +18,8 @@ class VxAnalyzer(object):
         else:
             self.logger = logger
 
+        # self.logger.setLevel(10)
+
     def analyze_bss(self):
         self.report.append('{:-^60}'.format('analyze bss info'))
         self.logger.info("Start analyze bss info")
@@ -31,7 +33,18 @@ class VxAnalyzer(object):
             for call_addr in parms_data:
                 call_parms = parms_data[call_addr]
                 bss_start_address = call_parms['parms']['parm_1']['parm_value']
-                self.report.append("bss_start_address: {}".format(hex(bss_start_address)))
+                self.logger.debug("bss_start_address: {}".format(bss_start_address))
+                try:
+                    if getDataAt(toAddr(bss_start_address)).isPointer():
+                        self.logger.debug("bzero parm_1 is pointer")
+                        bss_start_address = getDataAt(toAddr(bss_start_address)).getValue().offset
+                        self.logger.debug("Real bss_start_address: {}".format(bss_start_address))
+
+                except BaseException as err:
+                    self.logger.error(err)
+
+                self.logger.info("call_parms: {}".format(call_parms))
+                self.report.append("bss_start_address: {:#010x}".format(bss_start_address))
                 bss_length = call_parms['parms']['parm_2']['parm_value']
                 if not bss_length:
                     self.logger.error("Can't calculate bss length.")
