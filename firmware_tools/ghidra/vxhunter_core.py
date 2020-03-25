@@ -5,7 +5,14 @@ import struct
 
 default_check_count = 100
 
-known_address = [0x80002000, 0x10000, 0x1000, 0xf2003fe4, 0x100000, 0x107fe0]
+known_address = [
+    0x80002000,
+    0x10000,
+    0x1000,
+    0xf2003fe4,
+    0x100000,
+    0x107fe0
+]
 
 function_name_key_words = ['bzero', 'usrInit', 'bfill']
 
@@ -76,10 +83,10 @@ class VxTarget(object):
         if logger is None:
             self.logger = logging.getLogger(__name__)
             self.logger.setLevel(logging.INFO)
-            consolehandler = logging.StreamHandler()
+            console_handler = logging.StreamHandler()
             console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
-            consolehandler.setFormatter(console_format)
-            self.logger.addHandler(consolehandler)
+            console_handler.setFormatter(console_format)
+            self.logger.addHandler(console_handler)
         else:
             self.logger = logger
         self.prepare()

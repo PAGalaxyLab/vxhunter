@@ -1,6 +1,4 @@
 # coding=utf-8
-
-import logging
 import string
 import struct
 import sys
@@ -11,6 +9,7 @@ from common import can_demangle
 from common import demangler
 # Functions from common
 from common import is_address_in_current_program
+from common import get_logger
 
 from ghidra.program.model.util import CodeUnitInsertionException
 from ghidra.program.model.symbol import RefType, SourceType
@@ -21,8 +20,7 @@ from vx_structs import *
 # everything from that module, this module will behave as if Ghidra directly launched it.
 from __main__ import *
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 function_name_key_words = ['bzero', 'usrInit', 'bfill']
 

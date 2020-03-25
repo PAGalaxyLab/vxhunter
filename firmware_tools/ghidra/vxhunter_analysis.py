@@ -1,9 +1,7 @@
 import json
-
 from ghidra.program.model.symbol import RefType, SourceType
-
 from vxhunter_core import *
-from vxhunter_utility.common import create_initialized_block
+from vxhunter_utility.common import create_initialized_block, get_logger
 from vxhunter_utility.function_analyzer import *
 from vxhunter_utility.symbol import *
 
@@ -14,12 +12,7 @@ class VxAnalyzer(object):
         self.report = []
 
         if logger is None:
-            self.logger = logging.getLogger('target')
-            self.logger.setLevel(logging.INFO)
-            consolehandler = logging.StreamHandler()
-            console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
-            consolehandler.setFormatter(console_format)
-            self.logger.addHandler(consolehandler)
+            self.logger = get_logger(self.__name__)
         else:
             self.logger = logger
 

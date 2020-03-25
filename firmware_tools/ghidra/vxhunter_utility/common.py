@@ -14,13 +14,20 @@ from __main__ import *
 debug = False
 process_is_64bit = False
 
+
 # Init Default Logger
-logger = logging.getLogger('Default_logger')
-logger.setLevel(logging.INFO)
-console_handler = logging.StreamHandler()
-console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
-console_handler.setFormatter(console_format)
-logger.addHandler(console_handler)
+def get_logger(name="Default_logger"):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    console_handler = logging.StreamHandler()
+    console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
+    console_handler.setFormatter(console_format)
+    logger.addHandler(console_handler)
+    return logger
+
+
+logger = get_logger()
+
 
 if debug:
     logger.setLevel(logging.DEBUG)

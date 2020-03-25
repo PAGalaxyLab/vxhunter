@@ -26,6 +26,8 @@ decompile_function_cache = {
 
 }
 
+logger = get_logger(__name__)
+
 
 class FlowNode(object):
     def __init__(self, var_node, logger=logger):

@@ -8,12 +8,7 @@ from ghidra.util.task import TaskMonitor
 
 
 # Logger setup
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-console_handler = logging.StreamHandler()
-console_format = logging.Formatter('[%(levelname)-8s][%(module)s] %(message)s')
-console_handler.setFormatter(console_format)
-logger.addHandler(console_handler)
+logger = get_logger(__name__)
 report = []
 
 # Init Timer
