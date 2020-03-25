@@ -37,12 +37,7 @@ class FlowNode(object):
         """
         self.var_node = var_node
         if logger is None:
-            self.logger = logging.getLogger('FlowNode_logger')
-            self.logger.setLevel(logging.INFO)
-            consolehandler = logging.StreamHandler()
-            console_format = logging.Formatter('[%(levelname)-8s][%(module)s.%(funcName)s] %(message)s')
-            consolehandler.setFormatter(console_format)
-            self.logger.addHandler(consolehandler)
+            self.logger = get_logger(self.__name__)
         else:
             self.logger = logger
 

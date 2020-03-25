@@ -10,6 +10,8 @@ class VxAnalyzer(object):
     def __init__(self, logger=None):
         self._vx_version = None
         self.report = []
+        self.timer_log = []
+        self.timer = Timer()
 
         if logger is None:
             self.logger = get_logger(self.__name__)
@@ -28,7 +30,6 @@ class VxAnalyzer(object):
                                                                                                               ])
             for call_addr in parms_data:
                 call_parms = parms_data[call_addr]
-                # print(call_parms)
                 bss_start_address = call_parms['parms']['parm_1']['parm_value']
                 self.report.append("bss_start_address: {}".format(hex(bss_start_address)))
                 bss_length = call_parms['parms']['parm_2']['parm_value']
@@ -50,7 +51,6 @@ class VxAnalyzer(object):
 
         else:
             self.logger.error("Can't find bzero function in firmware")
-
         self.report.append('{}\r\n'.format("-" * 60))
 
     def analyze_login_accouts(self):
@@ -374,14 +374,54 @@ class VxAnalyzer(object):
         for line in self.report:
             print(line)
 
+        # Print timer
+        print('{:-^60} timer'.format(__name__))
+        for line in self.timer_log:
+            print(line)
+        print('{}\r\n'.format("-" * 60))
+
     def start_analyzer(self):
+        self.timer.reset()
         self.analyze_bss()
+        timer_log = "analyze bss takes {:.3} seconds".format(self.timer.get_timer())
+        self.logger.info(timer_log)
+        self.timer_log.append(timer_log)
+
+        self.timer.reset()
         self.analyze_login_accouts()
+        timer_log = "analyze loginUserAdd function takes {:.3} seconds".format(self.timer.get_timer())
+        self.logger.info(timer_log)
+        self.timer_log.append(timer_log)
+
+        self.timer.reset()
         self.analyze_service()
+        timer_log = "analyze services takes {:.3} seconds".format(self.timer.get_timer())
+        self.logger.info(timer_log)
+        self.timer_log.append(timer_log)
+
+        self.timer.reset()
         self.analyze_symbols()
+        timer_log = "analyze symbols takes {:.3} seconds".format(self.timer.get_timer())
+        self.logger.info(timer_log)
+        self.timer_log.append(timer_log)
+
+        self.timer.reset()
         self.analyze_netpool()
+        timer_log = "analyze netpool takes {:.3} seconds".format(self.timer.get_timer())
+        self.logger.info(timer_log)
+        self.timer_log.append(timer_log)
+
+        self.timer.reset()
         self.analyze_function_xref_by_symbol_get()
+        timer_log = "analyze symFindByName function call takes {:.3} seconds".format(self.timer.get_timer())
+        self.logger.info(timer_log)
+        self.timer_log.append(timer_log)
+
+        self.timer.reset()
         self.analyze_active_task()
+        timer_log = "analyze active task takes {:.3} seconds".format(self.timer.get_timer())
+        self.logger.info(timer_log)
+        self.timer_log.append(timer_log)
 
 
 if __name__ == '__main__':
