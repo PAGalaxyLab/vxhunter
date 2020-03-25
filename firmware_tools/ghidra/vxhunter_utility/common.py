@@ -40,6 +40,26 @@ listing = currentProgram.getListing()
 can_demangle = demangler.canDemangle(currentProgram)
 
 
+class Timer(object):
+    def __init__(self):
+        self.start_time = None
+
+    def reset(self):
+        self.start_time = time.time()
+
+    def start_timer(self):
+        if self.start_time:
+            return False
+        else:
+            self.start_time = time.time()
+            return self.start_time
+
+    def get_timer(self):
+        if self.start_time:
+            return time.time() - self.start_time
+        return False
+
+
 def is_address_in_current_program(address):
     for block in currentProgram.memory.blocks:
         if block.getStart().offset <= address.offset <= block.getEnd().offset:
