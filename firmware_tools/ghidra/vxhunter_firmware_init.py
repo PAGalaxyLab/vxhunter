@@ -42,7 +42,7 @@ try:
 
         if target.load_address:
             load_address_time = timer.get_timer()
-            logger.info("Analyze Load Address takes {:.3} seconds".format(load_address_time))
+            logger.info("Analyze Load Address takes {:.3f} seconds".format(load_address_time))
             load_address = target.load_address
 
             # Rebase_image
@@ -52,7 +52,7 @@ try:
             logger.debug("Rebasing. target_block: {}; load_address: {}".format(target_block, address))
             currentProgram.memory.moveBlock(target_block, address, TaskMonitor.DUMMY)
             rebase_time = timer.get_timer()
-            logger.info("Rebase image takes {:.3} seconds".format(rebase_time))
+            logger.info("Rebase image takes {:.3f} seconds".format(rebase_time))
 
             # Create symbol table structs
             timer.reset()
@@ -61,7 +61,7 @@ try:
             symbol_table_end = target.symbol_table_end + target.load_address
             fix_symbol_table_structs(symbol_table_start, symbol_table_end, vx_version)
             fix_symbol_table_time = timer.get_timer()
-            logger.info("Creating symbol table takes {:.3} seconds".format(fix_symbol_table_time))
+            logger.info("Creating symbol table takes {:.3f} seconds".format(fix_symbol_table_time))
 
             # Load symbols
             timer.reset()
@@ -84,23 +84,23 @@ try:
                     continue
             logger.info("Waiting for pending analysis to complete...")
             load_symbols_time = timer.get_timer()
-            logger.info("Load symbols takes {:.3} seconds".format(load_symbols_time))
+            logger.info("Load symbols takes {:.3f} seconds".format(load_symbols_time))
             timer.reset()
             analyzeAll(currentProgram)
             functions_count_after = function_manager.getFunctionCount()
             ghidra_analyze_all_time = timer.get_timer()
-            logger.info("Ghidra analyzer all takes {:.3} seconds".format(ghidra_analyze_all_time))
+            logger.info("Ghidra analyzer all takes {:.3f} seconds".format(ghidra_analyze_all_time))
             report.append("Functions count: {}(After analyze) ".format(functions_count_after))
             report.append("VxHunter found {} new functions".format(functions_count_after - functions_count_before))
             report.append('{}\r\n'.format("-" * 60))
 
             # Add timer report
             report.append('{:-^60}'.format('VxHunter timer'))
-            report.append("Analyze Load Address takes {:.3} seconds".format(load_address_time))
-            report.append("Rebase image takes {:.3} seconds".format(rebase_time))
-            report.append("Creating symbol table takes {:.3} seconds".format(fix_symbol_table_time))
-            report.append("Load symbols takes {:.3} seconds".format(load_symbols_time))
-            report.append("Ghidra analyzer all takes {:.3} seconds".format(ghidra_analyze_all_time))
+            report.append("Analyze Load Address takes {:.3f} seconds".format(load_address_time))
+            report.append("Rebase image takes {:.3f} seconds".format(rebase_time))
+            report.append("Creating symbol table takes {:.3f} seconds".format(fix_symbol_table_time))
+            report.append("Load symbols takes {:.3f} seconds".format(load_symbols_time))
+            report.append("Ghidra analyzer all takes {:.3f} seconds".format(ghidra_analyze_all_time))
             report.append('{}\r\n'.format("-" * 60))
             for line in report:
                 print(line)
