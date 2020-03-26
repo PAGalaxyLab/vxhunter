@@ -137,7 +137,7 @@ class VxAnalyzer(object):
 
         for service in sorted(service_status.items(), key=lambda x: x[1], reverse=True):
             self.logger.info('{}: {}'.format(service[0], service[1]))
-            self.report.append('{}: {}'.format(service[0], service[1]))
+            self.report.append('service:{: <20} {:>20}'.format(service[0], service[1]))
         self.report.append('{}\r\n'.format("-" * 60))
 
     def analyze_symbols(self):
@@ -219,7 +219,7 @@ class VxAnalyzer(object):
 
         if target_function:
             parms_data = dump_call_parm_value(call_address=target_function.getEntryPoint())
-            logger.debug("Found {} symFindByName call".format(len(parms_data)))
+            logger.debug("Found {: <20} symFindByName call".format(len(parms_data)))
             logger.debug("parms_data.keys(): {}".format(parms_data.keys()))
             currentReferenceManager = currentProgram.getReferenceManager()
             for call_addr in parms_data:
@@ -239,10 +239,11 @@ class VxAnalyzer(object):
                         logger.debug("searched_symbol_name: {}".format(searched_symbol_name))
                         if isinstance(searched_symbol_name, unicode) is False:
                             searched_symbol_name = searched_symbol_name.value
-                        self.logger.info("Found symFindByName({}) call at {:#010x}".format(
+                        self.logger.info("Found symFindByName({: <20}) call at {:#010x}".format(
                             searched_symbol_name, call_parms['call_addr'].offset))
-                        self.report.append("Found symFindByName({}) call at {:#010x}".format(
-                            searched_symbol_name, call_parms['call_addr'].offset))
+                        found_symbol_search = "symFindByName({})".format(searched_symbol_name)
+                        self.report.append("Found {: <40} call at {:#010x}".format(
+                            found_symbol_search, call_parms['call_addr'].offset))
 
                         to_function = get_function(searched_symbol_name, None)
 
@@ -366,14 +367,18 @@ class VxAnalyzer(object):
                 # TODO: Print task info pretty
                 tcb_info = fix_tcb(tcb_addr, self._vx_version)
                 task_name = tcb_info["task_name"]
+                if task_name:
+                    task_name = task_name.getValue()
                 task_entry_addr = tcb_info["task_entry_addr"]
                 task_entry_name = tcb_info["task_entry_name"]
                 task_stack_base = tcb_info["task_stack_base"]
                 task_stack_limit = tcb_info["task_stack_limit"]
                 task_stack_limit_end = tcb_info["task_stack_limit_end"]
-                task_info_data = "  Task name: {}  Entry: {}({:#010x})  tid: {:#010x}  " \
-                                "stack base: {:#010x}   stack limit {:#010x}   stack end {:#010x}".format(
-                    task_name, task_entry_name, task_entry_addr, tcb_addr.getOffset(), task_stack_base,
+                # Pretty print task_info
+                task_entry = "{}({:#010x})".format(task_entry_name, task_entry_addr)
+                task_info_data = "  Task name: {: <20}  Entry: {: <30}  tid: {:#010x}  " \
+                                "stack base: {:#010x} stack limit {:#010x}   stack end {:#010x}".format(
+                    task_name, task_entry, tcb_addr.getOffset(), task_stack_base,
                     task_stack_limit, task_stack_limit_end
                 )
                 self.report.append(task_info_data)
