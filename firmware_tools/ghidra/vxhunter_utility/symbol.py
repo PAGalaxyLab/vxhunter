@@ -2,11 +2,12 @@
 import string
 import struct
 import sys
-
+# Handle Java Exception
+import java.lang.Exception
 # Constants from common
 from common import can_demangle
 # Objects from common
-from common import demangler
+from common import demangler, DemangledException
 # Functions from common
 from common import is_address_in_current_program
 from common import get_logger
@@ -194,6 +195,9 @@ def demangled_symbol(symbol_string):
             logger.debug("First pass demangling failed: symbol_string: {}, reason: {}".format(symbol_string, err))
             pass
 
+        except java.lang.Exception as err:
+            logger.debug("demangling failed: symbol_string: {}, reason: {}".format(symbol_string, err))
+
         if not sym_demangled:
             try:
                 # Temp fix to handle _ prefix function name by remove _ prefix before demangle
@@ -202,6 +206,9 @@ def demangled_symbol(symbol_string):
             except DemangledException as err:
                 logger.debug("Second pass demangling failed: symbol_string: {}, reason:{}".format(symbol_string, err))
                 pass
+
+            except java.lang.Exception as err:
+                logger.debug("demangling failed: symbol_string: {}, reason: {}".format(symbol_string, err))
 
         if sym_demangled:
             sym_demangled_name = sym_demangled.getSignature(False)
