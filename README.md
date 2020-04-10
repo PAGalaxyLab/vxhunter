@@ -1,6 +1,8 @@
 # VxHunter 
 A ToolSet for VxWorks Based Embedded Device Analyses.
 
+*Readme in other languages: [English](README.md), [简体中文](README.zh-cn.md)*
+
 
 ## Firmware Analyze Tool
 The firmware analyze tool is plugins written in Python, mainly used for analyze firmware loading address, fix function name with symbol table and etc.
