@@ -4,7 +4,7 @@ VxHunter radare2脚本能自动分析VxWorks镜像的加载地址及符号信息
 
 
 ## 步骤一: 在radare2中打开VxWorks镜像
-示例固件下载地址 [这里](https://github.com/dark-lbp/vxhunter/tree/master/example_firmware), in this document we chose [image_vx5_ppc_big_endian.bin](https://github.com/dark-lbp/vxhunter/blob/master/example_firmware/image_vx5_ppc_big_endian.bin).
+示例固件 [下载地址](https://github.com/dark-lbp/vxhunter/tree/master/example_firmware), 在这里我们使用固件是[image_vx5_ppc_big_endian.bin](https://github.com/dark-lbp/vxhunter/blob/master/example_firmware/image_vx5_ppc_big_endian.bin).
 
 在radare2使用正确的处理器类型来加载VxWorks镜像。
 
