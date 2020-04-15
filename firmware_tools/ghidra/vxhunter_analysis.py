@@ -1,3 +1,10 @@
+#Trace parameters of a function
+#@author Wenzhe Zhu
+#@category VxWorks
+#@keybinding
+#@menupath
+#@toolbar
+# coding=utf-8
 import json
 from ghidra.program.model.symbol import RefType, SourceType
 from vxhunter_core import *

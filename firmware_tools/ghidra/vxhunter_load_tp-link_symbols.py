@@ -1,3 +1,9 @@
+#Trace parameters of a function
+#@author Wenzhe Zhu
+#@category VxWorks
+#@keybinding
+#@menupath
+#@toolbar
 # coding=utf-8
 import logging
 import struct
@@ -56,11 +62,12 @@ def load_symbols(file_data, is_big_endian=True):
         add_symbol(symbol_name, None, symbol_address, symbol_flag)
 
 
-try:
-    symbol_file = askFile("Open symbol file", "")
-    symbol_file_data = file(symbol_file.absolutePath).read()
-    if is_vx_symbol_file(symbol_file_data):
-        load_symbols(symbol_file_data)
+if __name__ == '__main__':
+    try:
+        symbol_file = askFile("Open symbol file", "")
+        symbol_file_data = file(symbol_file.absolutePath).read()
+        if is_vx_symbol_file(symbol_file_data):
+            load_symbols(symbol_file_data)
 
-except Exception as err:
-    print(err)
+    except Exception as err:
+        print(err)
