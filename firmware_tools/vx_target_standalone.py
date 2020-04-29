@@ -1,6 +1,7 @@
 # coding=utf-8
 import logging
 import struct
+from difflib import SequenceMatcher
 
 default_check_count = 100
 
@@ -417,33 +418,6 @@ class VxTarget(object):
                 offset += 1
         self._string_table = str_tab_data
 
-    def _check_fix(self, func_index, str_index):
-        """
-
-        :param func_index:
-        :param str_index:
-        :return:
-        """
-        if len(self._symbol_table) < default_check_count:
-            count = len(self._symbol_table)
-        else:
-            count = default_check_count
-        for i in range(count):
-            if (func_index >= len(self._symbol_table)) or (str_index >= len(self._string_table)):
-                self.logger.debug("_check_fix False")
-                return False
-            if i == count - 1:
-                self.logger.debug("_check_fix True")
-                return True
-            if self._string_table[str_index]['length'] == self._symbol_table[func_index]['symbol_name_length']:
-                func_index += 1
-                str_index += 1
-                self.logger.debug("_check_fix continue")
-                continue
-            else:
-                self.logger.debug("_check_fix False2")
-                return False
-
     def find_loading_address(self):
         """ Find VxWorks image load address by automatic analysis.
 
@@ -462,25 +436,18 @@ class VxTarget(object):
         key_function_index = self._firmware.index('\x00' + function_name_key_words[0] + '\x00')
         str_start_address, str_end_address = self.find_string_table_by_key_function_index(key_function_index)
         self.get_string_table(str_start_address, str_end_address)
-        # TODO: Need improve performance
+
         self.logger.info("Start analyse")
-        for func_index in range(len(self._symbol_table)):
-            for str_index in range(len(self._string_table)):
-                self.logger.debug(
-                    "self._string_table[str_index]['length']: %s" % self._string_table[str_index]['length'])
-                self.logger.debug(
-                    "self._symbol_table[func_index]['symbol_name_length']: %s" % self._symbol_table[func_index][
-                        'symbol_name_length'])
-                if self._string_table[str_index]['length'] == self._symbol_table[func_index]['symbol_name_length']:
-                    if self._check_fix(func_index, str_index) is True:
-                        self.logger.debug("self._symbol_table[func_index]['symbol_name_addr']: %s" % self._symbol_table[func_index]['symbol_name_addr'])
-                        self.logger.debug("self._string_table[str_index]['address']: %s" % self._string_table[str_index]['address'])
-                        self.load_address = self._symbol_table[func_index]['symbol_name_addr'] - \
-                                            self._string_table[str_index]['address']
-                        self.logger.info('load address is :%s' % hex(self.load_address))
-                        return self.load_address
-                else:
-                    continue
+
+        temp_symbol_table = list(map(lambda x: x['symbol_name_length'], self._symbol_table))
+        temp_string_table = list(map(lambda x: x['length'], self._string_table))
+        matcher = SequenceMatcher(None, temp_symbol_table, temp_string_table)
+        func_index, str_index, length = matcher.find_longest_match(0, len(temp_symbol_table), 0, len(temp_string_table))
+        if length >= default_check_count:
+            self.load_address = self._symbol_table[func_index]['symbol_name_addr'] - \
+                                self._string_table[str_index]['address']
+            return self.load_address
+
         self.logger.error("We didn't find load address in this firmware, sorry!")
 
     def _check_load_address(self, address):
