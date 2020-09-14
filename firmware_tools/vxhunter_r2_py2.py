@@ -125,7 +125,12 @@ class VxTarget(object):
         :param offset: offset from image.
         :return: True if offset is symbol table, False otherwise.
         """
-        check_data = self._firmware[offset:offset + self._symbol_interval * default_check_count]
+        start_offset = offset
+        end_offset = offset + self._symbol_interval * default_check_count
+        if end_offset > len(self._firmware):
+            return False
+
+        check_data = self._firmware[start_offset:end_offset]
         is_big_endian = True
         is_little_endian = True
         # check symbol data match struct
@@ -157,6 +162,9 @@ class VxTarget(object):
                     self.logger.debug("VxWorks binary is not little endian.")
                     is_little_endian = False
                     break
+
+            if is_big_endian and is_little_endian:
+                return False
 
             return is_big_endian ^ is_little_endian
 
