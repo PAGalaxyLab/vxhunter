@@ -989,9 +989,9 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             if sName:
                 sName_dst = idc.Dword(ea + offset + 4)
                 if vx_version == 6:
-                    sName_type = idc.Dword(ea + offset + 12)
+                    sName_type = idc.Byte(ea + 0x12)
                 else:
-                    sName_type = idc.Dword(ea + offset + 8)
+                    sName_type = idc.Byte(ea + 0x0e)
                 idc.MakeName(sName_dst, sName)
                 if sName_type in need_create_function:
                     # flags = idc.GetFlags(ea)
