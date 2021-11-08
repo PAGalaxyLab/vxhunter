@@ -7,7 +7,7 @@ from scapy.layers.inet import TCP, IP, Ether, UDP
 from vx_base_debugger import VxSerialBaseDebuger
 from keystone import *
 from capstone import *
-
+from mips16e_asm import *
 
 MIPS_REGS = [
     '$0', 't0', 's0', 't8',
@@ -218,13 +218,17 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
             self.logger.debug("current bp_address is zero, skip text update.")
             return None
         flag_address = self.current_bp_info["flag_address"]
-        original_update_count = struct.unpack("!I", self.get_mem_dump(flag_address + 0x14, 0x04))[0]
-        self.write_memory_data(flag_address + 0x0c, struct.pack('!I', update_address))
-        self.write_memory_data(flag_address + 0x10, struct.pack('!I', update_size))
+        pack_parm = ">I"
+        if self.endian == 2:
+            pack_parm = "<I"
+
+        original_update_count = struct.unpack(pack_parm, self.get_mem_dump(flag_address + 0x14, 0x04))[0]
+        self.write_memory_data(flag_address + 0x0c, struct.pack(pack_parm, update_address))
+        self.write_memory_data(flag_address + 0x10, struct.pack(pack_parm, update_size))
         # set update flag
         self._set_dbg_flag(2)
         # wait text update
-        current_update_count = struct.unpack("!I", self.get_mem_dump(flag_address + 0x14, 0x04))[0]
+        current_update_count = struct.unpack(pack_parm, self.get_mem_dump(flag_address + 0x14, 0x04))[0]
         while current_update_count != original_update_count + 1:
             self.logger.debug("current_update_count: %s , should be: %s" % (hex(current_update_count),
                                                                 hex(original_update_count + 1)))
@@ -236,7 +240,7 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
 
             # set update flag
             self._set_dbg_flag(2)
-            current_update_count = struct.unpack("!I", self.get_mem_dump(flag_address + 0x14, 0x04))[0]
+            current_update_count = struct.unpack(pack_parm, self.get_mem_dump(flag_address + 0x14, 0x04))[0]
             time.sleep(1)
         self.logger.debug('text_update succeed')
         return True
@@ -263,7 +267,7 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
         reg_store_offset = 0x20
         recover_original_ra_asm_code = "lw $ra, 0x04-%s($sp)" % self.dbg_stack_size
         recover_original_ra_asm = self.assemble(recover_original_ra_asm_code, KS_ARCH_MIPS,
-                                                KS_MODE_MIPS32, KS_MODE_BIG_ENDIAN)[0]
+                                                KS_MODE_MIPS32,KS_MODE_BIG_ENDIAN if self.endian == 1 else KS_MODE_LITTLE_ENDIAN)[0]
 
         ##########################
         #     Init DBG Stack     #
@@ -297,8 +301,10 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
         # update cacheTextUpdate execute count
         asm_code += "lw $a0, 0x14($sp); addiu $a0, 0x01; sw $a0, 0x14($sp);"
 
+        j = 'jal' if self.cache_update_address & 0x1 == 0 else 'jalx' #take 16bit into considerate
+
         # update cache
-        asm_code += "lw $a0, 0x0c($sp); lw $a1, 0x10($sp); jal %s;" % hex(self.cache_update_address & 0xfffffff)
+        asm_code += "lw $a0, 0x0c($sp); lw $a1, 0x10($sp); %s %s;" % (j,hex(self.cache_update_address & 0xffffffe))
 
         # TODO: recover a0, a1
         # set flag to 0x00
@@ -307,14 +313,14 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
         # if flag != 0x01 keep loop
         asm_code += "lw $ra, 0x00($sp); addiu $ra, -0x01; bnez $ra, -%s;" % hex(0x08 + 0x04 + 0x10 + 0x0c + 0x10)
 
+
         ##########################
         #         Recover        #
         ##########################
 
         # update dbg stack cache before recover
-        asm_code += "move $a0, $sp; li $a1, %s; jal %s;" % (hex(self.dbg_stack_size),
-                                                            hex(self.cache_update_address & 0xfffffff))
-
+        asm_code += "move $a0, $sp; li $a1, %s; %s %s;" % ((hex(self.dbg_stack_size),j,
+                                                            hex(self.cache_update_address & 0xffffffe)))
         # recover regs
         stack_offset = reg_store_offset
         for i in range(0x20):
@@ -327,8 +333,10 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
         # return to bp
         asm_code += "lw $ra, 0x08($sp); addiu $ra, -%s; addiu $sp, %s; jr $ra;" % (hex(self.bp_overwrite_size),
                                                                                    hex(self.dbg_stack_size))
+        asm_code += "nop;" #Branch delay slot
+
         self.logger.debug("asm_code: %s" % asm_code)
-        asm_list = self.assemble(asm_code, KS_ARCH_MIPS, KS_MODE_MIPS32, KS_MODE_BIG_ENDIAN)
+        asm_list = self.assemble(asm_code, KS_ARCH_MIPS, KS_MODE_MIPS32, KS_MODE_BIG_ENDIAN if self.endian == 1 else KS_MODE_LITTLE_ENDIAN)
         if not asm_list:
             return None
         self.dbg_overwrite_size = len(asm_list * 0x04)
@@ -553,7 +561,7 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
         bp_address = self.current_bp_info["bp_address"]
         ra_address = self.current_bp_info["original_ra"]
         bp_asm_data = self.break_points[bp_address]["original_asm"][:4]
-        bp_asm = self.disassemble(bp_asm_data, bp_address, CS_ARCH_MIPS, CS_MODE_MIPS32, CS_MODE_BIG_ENDIAN)
+        bp_asm = self.disassemble(bp_asm_data, bp_address, CS_ARCH_MIPS, CS_MODE_MIPS32,CS_MODE_BIG_ENDIAN if self.endian == 1 else CS_MODE_LITTLE_ENDIAN)
         trace_data_list.append(bp_asm)
         # get ra asm
         ra_asm_data = None
@@ -565,7 +573,7 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
         if not ra_asm_data:
             ra_asm_data = self.get_mem_dump(ra_address, 0x04)
         self.logger.debug("ra_asm_data: %s" % ra_asm_data.encode("hex"))
-        ra_asm = self.disassemble(ra_asm_data, ra_address, CS_ARCH_MIPS, CS_MODE_MIPS32, CS_MODE_BIG_ENDIAN)
+        ra_asm = self.disassemble(ra_asm_data, ra_address, CS_ARCH_MIPS, CS_MODE_MIPS32, CS_MODE_BIG_ENDIAN if self.endian == 1 else CS_MODE_LITTLE_ENDIAN)
         self.logger.debug("ra_asm: %s" % ra_asm)
         trace_data_list.append(ra_asm)
         for i in range(len(trace_data_list)):
@@ -582,7 +590,7 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
         try:
             temp_bp_address_list = []
             bp_asm_data = self.break_points[bp_address]["original_asm"]
-            md = Cs(CS_ARCH_MIPS, CS_MODE_MIPS32 | CS_MODE_BIG_ENDIAN)
+            md = Cs(CS_ARCH_MIPS, CS_MODE_MIPS32 | (CS_MODE_BIG_ENDIAN if self.endian == 1 else CS_MODE_LITTLE_ENDIAN))
             md.detail = True
             asm_code_data = {}
             for i in md.disasm(bp_asm_data, bp_address):
@@ -627,7 +635,7 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
             self.logger.error("ERROR: %s" % err)
             return None
 
-    def create_bp_asm(self, bp_address):
+    def create_bp_asm(self, bp_address,is_16bit = 0):
         """Create breakpoint asm code
 
         :param bp_address: break point address
@@ -637,11 +645,19 @@ class Vx5MipsDebugger(VxSerialBaseDebuger):
         asm_code = "addiu $sp, -%s;" % hex(self.dbg_stack_size)
         # save original $RA value
         asm_code += "sw $ra, 0x04($sp);"
-        # jump to dbg loop
-        asm_code += "jal %s;" % (hex(self.debugger_base_address & 0xffffff))
+        if is_16bit == 0:
+            # jump to dbg loop
+            asm_code += "jal %s;" % (hex(self.debugger_base_address & 0xffffff))
+            asm_code += 'nop;' # Branch delay slot
+            asm_list = self.assemble(str(asm_code), KS_ARCH_MIPS, KS_MODE_16,KS_MODE_BIG_ENDIAN if self.endian == 1 else KS_MODE_LITTLE_ENDIAN)
+            if not asm_list:
+                return None
+            asm_data = "".join(asm_list).decode("hex")
+        else: #16 bit mode
+            asm_code += 'nop;nop;nop;' #padding
+            # jump to dbg loop
+            asm_code += "jalx %s;" % (hex(self.debugger_base_address & 0xffffff))
+            asm_code += 'nop;' # Branch delay slot
+            asm_data = ASM16(asm_code,self.endian)
         self.logger.debug("asm_code: %s" % asm_code)
-        asm_list = self.assemble(str(asm_code), KS_ARCH_MIPS, KS_MODE_MIPS32, KS_MODE_BIG_ENDIAN)
-        if not asm_list:
-            return None
-        asm_data = "".join(asm_list).decode("hex")
         return asm_data
