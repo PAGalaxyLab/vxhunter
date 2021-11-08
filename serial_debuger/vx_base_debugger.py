@@ -81,7 +81,7 @@ class VxSerialBaseDebuger(VxSerialBaseTarget):
         self.cache_update_address = cache_update_address
         self.dbg_stack_size = 0x200
         self.bp_overwrite_size = 0x10       # Breakpoint overwrite size
-        self.dbg_overwrite_size = 0x0
+        self.dbg_overwrite_size = 0x1
         self.process_regs = process_regs
         self.process_type = process_type
         self.endian = endian
@@ -245,7 +245,7 @@ class VxSerialBaseDebuger(VxSerialBaseTarget):
             if self.endian == 2:
                 pack_parm = "<I"
             sp = int(self.current_task_regs[task]["sp"], 16)
-            break_point = struct.unpack(pack_parm, self.get_mem_dump(sp + 0x08, 0x04))[0] - self.bp_overwrite_size
+            break_point = (struct.unpack(pack_parm, self.get_mem_dump(sp + 0x08, 0x04))[0] - self.bp_overwrite_size) & 0xfffffffe # take 16bit in considerate
             original_ra = struct.unpack(pack_parm, self.get_mem_dump(sp + 0x04, 0x04))[0]
             self.current_bp_info["bp_address"] = break_point  # break point address = $ra - 0x08
             self.current_bp_info["flag_address"] = sp
@@ -282,6 +282,12 @@ class VxSerialBaseDebuger(VxSerialBaseTarget):
                 # cleanup list after temp break point restore
                 del self.break_points[bp_addr]
 
+    def remove_break_point(self,bp_addr):
+        self.restone_bp_asm(bp_addr)
+        # cleanup list after temp break point restore
+        del self.break_points[bp_addr]
+
+
     def _is_on_break_point(self):
         """Check did any task hit break point.
 
@@ -292,9 +298,12 @@ class VxSerialBaseDebuger(VxSerialBaseTarget):
             return None
         # TODO: need handle multi task hit breakpoint.
         for task in current_tasks_status:
-            if self._is_address_in_debug_loop(int(current_tasks_status[task]['pc'], 16)):
-                return task
-
+            self.logger.debug(current_tasks_status[task])
+            try:
+                if self._is_address_in_debug_loop(int(current_tasks_status[task]['pc'], 16)):
+                    return task
+            except:
+                return None
         return None
 
     def wait_break(self):
@@ -306,10 +315,9 @@ class VxSerialBaseDebuger(VxSerialBaseTarget):
         try:
             # Wait for any task hit break point.
             task = self._is_on_break_point()
-            while not task:
+            while task is None:
                 task = self._is_on_break_point()
                 time.sleep(0.2)
-
             # Get break point by task
             current_breakpoint = self.is_task_on_break_point(task)
             while not current_breakpoint:
@@ -423,7 +431,7 @@ class VxSerialBaseDebuger(VxSerialBaseTarget):
         """
         bp_address = self.current_bp_info["bp_address"]
         bp_asm_data = self.break_points[bp_address]["original_asm"]
-        bp_asm_code = self.disassemble(bp_asm_data, bp_address, CS_ARCH_MIPS, CS_MODE_MIPS32, CS_MODE_BIG_ENDIAN)
+        bp_asm_code = self.disassemble(bp_asm_data, bp_address, CS_ARCH_MIPS, CS_MODE_MIPS32,CS_MODE_BIG_ENDIAN if self.endian == 1 else  CS_MODE_LITTLE_ENDIAN)
         print(bp_asm_code)
 
     def show_task_bp_trace(self, task):
@@ -523,7 +531,7 @@ class VxSerialBaseDebuger(VxSerialBaseTarget):
         if wait:
             self.wait_task_break(task)
 
-    def create_bp_asm(self, bp_address):
+    def create_bp_asm(self, bp_address,is_16bit):
         """Create breakpoint asm code
 
         :param bp_address: break point address
@@ -531,10 +539,12 @@ class VxSerialBaseDebuger(VxSerialBaseTarget):
         """
         self.not_implemented("create_bp_asm")
 
-    def add_break_point(self, bp_address, bp_type=0, condition=None):
+    def add_break_point(self, bp_address, is_16bit = 0,bp_type=0, condition=None):
         """Add break point
 
         :param bp_address: Break point address you want to Add.
+        :param is_16bit 0 = 32 bit MIPS
+                        1 = 16 bit MIPS
         :param bp_type: 0 = normal break point should will keep
                         1 = temp break point, used to keep normal break point add automatically.
                             will be removed after hit normal break point.
@@ -547,14 +557,14 @@ class VxSerialBaseDebuger(VxSerialBaseTarget):
         if bp_type == 0:
             self.logger.info("Add breakpoint at %s" % hex(bp_address))
         # create break point asm
-        asm_data = self.create_bp_asm(bp_address)
+        asm_data = self.create_bp_asm(bp_address,is_16bit)
         if not asm_data:
             self.logger.error("Can't create break point asm")
             return False
         asm_length = len(asm_data)
         # get original_asm
         original_asm = self.get_mem_dump(bp_address, asm_length)
-        bp_asm_code = self.disassemble(original_asm, bp_address, CS_ARCH_MIPS, CS_MODE_MIPS32, CS_MODE_BIG_ENDIAN)
+        bp_asm_code = self.disassemble(original_asm, bp_address, CS_ARCH_MIPS, CS_MODE_MIPS32,CS_MODE_BIG_ENDIAN if self.endian == 1 else CS_MODE_LITTLE_ENDIAN)
         self.logger.debug("original_asm: %s" % original_asm)
         self.bp_overwrite_size = asm_length
         self.write_memory_data(bp_address, asm_data)
