@@ -1196,10 +1196,17 @@ try:
         @classmethod
         def update(self, ctx):
             try:
-                if ctx.widget_type == idaapi.BWN_DISASM:
-                    return idaapi.AST_ENABLE_FOR_FORM
+                if idaapi.IDA_SDK_VERSION >= 900:
+                    # Since IDA 9.0, form_type is deprecated, should use widget_type
+                    if ctx.widget_type == idaapi.BWN_DISASM:
+                        return idaapi.AST_ENABLE_FOR_FORM
+                    else:
+                        return idaapi.AST_DISABLE_FOR_FORM
                 else:
-                    return idaapi.AST_DISABLE_FOR_FORM
+                    if ctx.form_type == idaapi.BWN_DISASM:
+                        return idaapi.AST_ENABLE_FOR_FORM
+                    else:
+                        return idaapi.AST_DISABLE_FOR_FORM
             except:
                 # Add exception for main menu on >= IDA 7.0
                 return idaapi.AST_ENABLE_ALWAYS
