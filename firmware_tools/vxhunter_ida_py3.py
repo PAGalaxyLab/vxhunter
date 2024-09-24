@@ -14,7 +14,7 @@ default_check_count = 100
 
 known_address = [0x80002000, 0x10000, 0x1000, 0xf2003fe4, 0x100000, 0x107fe0]
 
-function_name_key_words = ['bzero', 'usrInit', 'bfill']
+function_name_key_words = [b'bzero', b'usrInit', b'bfill']
 
 # VxWorks 5.5
 vx_5_sym_types = [
@@ -824,6 +824,8 @@ Please choose VxWorks main version
             self.vx_version = (5, 6)[self.GetControlValue(self.c_vxversion)]
             return 1
 
+        return 1
+
 
 class FixCodeForm(idaapi.Form):
     def __init__(self):
@@ -853,6 +855,8 @@ Please input start address and end address
             self.end_address = self.GetControlValue(self.c_EndAddress)
             return 1
 
+        return 1
+
 
 class FixAsciiForm(idaapi.Form):
     def __init__(self):
@@ -877,6 +881,8 @@ Please input string table start address.
         if fid == -2:
             self.string_address = self.GetControlValue(self.c_Address)
             return 1
+
+        return 1
 
 
 class VxHunter_Plugin_t(idaapi.plugin_t):
@@ -1086,6 +1092,7 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
                 break
 
     def load_symbols(self, file_data, is_big_endian=True):
+        is_rebased = False
         symbol_list = []
         if is_big_endian:
             unpack_format = '>I'
@@ -1101,14 +1108,14 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
         for i in range(symbol_count):
             offset = i * 8
             symbol_data = file_data[symbol_offset + offset:symbol_offset + offset + 8]
-            flag = ord(symbol_data[0])
-            string_offset = struct.unpack(unpack_format, '\x00' + symbol_data[1:4])[0]
+            flag = symbol_data[0]
+            string_offset = struct.unpack(unpack_format, b'\x00' + symbol_data[1:4])[0]
             string_offset += string_table_offset
             print("string_offset: %s" % string_offset)
             symbol_name = ""
             while True:
-                if file_data[string_offset] != '\x00':
-                    symbol_name += file_data[string_offset]
+                if file_data[string_offset] != 0x0:
+                    symbol_name += chr(file_data[string_offset])
                     string_offset += 1
 
                 else:
@@ -1117,7 +1124,7 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
             symbol_address = struct.unpack(unpack_format, symbol_data[-4:])[0]
             symbol_list.append([flag, symbol_name, symbol_address])
             # Find TP-Link device loading address with symbols
-            if "wrs_kernel_text_start" in symbol_name:
+            if symbol_name.endswith("_kernel_text_start") and not is_rebased:
                 load_address = symbol_address
                 current_image_base = idaapi.get_imagebase()
                 shift_address = load_address - current_image_base
@@ -1125,11 +1132,12 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
                     idaapi.rebase_program(0x70000000, 0x0008)
                     shift_address -= 0x70000000
                 idaapi.rebase_program(shift_address, 0x0008)
+                is_rebased = True
 
         # load symbols
         for symbol_data in symbol_list:
             flag, symbol_name, symbol_address = symbol_data
-            idc.set_name(symbol_address, symbol_name.decode('utf-8'), idc.SN_CHECK)
+            idc.set_name(symbol_address, symbol_name, idc.SN_CHECK)
             if flag == 0x54:
                 if symbol_name:
                     print("Start fix Function %s at %s" % (symbol_name, hex(symbol_address)))
@@ -1138,14 +1146,14 @@ class VxHunter_Plugin_t(idaapi.plugin_t):
 
     def load_symbol_file(self):
         symbol_file_path = ida_kernwin.ask_file(0, "*", "Please chose the VxWorks symbol file")
-        print("symbol_file_path: {}".format(symbol_file_path))
-        symbol_file_data = open(symbol_file_path, 'rb').read()
-        if is_vx_symbol_file(symbol_file_data):
-            self.load_symbols(symbol_file_data)
-            idaapi.auto_wait()
+        if symbol_file_path:
+            print("symbol_file_path: {}".format(symbol_file_path))
+            symbol_file_data = open(symbol_file_path, 'rb').read()
+            if is_vx_symbol_file(symbol_file_data):
+                self.load_symbols(symbol_file_data)
+                idaapi.auto_wait()
 
-        else:
-            return
+        return
 
     def run(self, arg):
         self.handler_auto_fix_idb()
@@ -1188,10 +1196,17 @@ try:
         @classmethod
         def update(self, ctx):
             try:
-                if ctx.form_type == idaapi.BWN_DISASM:
-                    return idaapi.AST_ENABLE_FOR_FORM
+                if idaapi.IDA_SDK_VERSION >= 900:
+                    # Since IDA 9.0, form_type is deprecated, should use widget_type
+                    if ctx.widget_type == idaapi.BWN_DISASM:
+                        return idaapi.AST_ENABLE_FOR_FORM
+                    else:
+                        return idaapi.AST_DISABLE_FOR_FORM
                 else:
-                    return idaapi.AST_DISABLE_FOR_FORM
+                    if ctx.form_type == idaapi.BWN_DISASM:
+                        return idaapi.AST_ENABLE_FOR_FORM
+                    else:
+                        return idaapi.AST_DISABLE_FOR_FORM
             except:
                 # Add exception for main menu on >= IDA 7.0
                 return idaapi.AST_ENABLE_ALWAYS
